@@ -44,7 +44,7 @@ stl.output_char 'r'
 stl.output_char 'l'
 stl.output_char 'd'
 stl.output_char '!'
-stl.output_char 10        // newline
+stl.output_char '\\n'     // newline
 stl.loop                  // halt (loop to self)
 `;
 

@@ -136,18 +136,22 @@ function FJReference() {
 mylib.helper`}</Pre>
       </Section>
 
-      <Section title="Directives">
+      <Section title="Reserved Keywords">
+        <p className="mb-2" style={{ color: '#888', fontSize: 12 }}>
+          The assembler recognises exactly these keywords. Everything else
+          (incl. <Code>output_char</Code>, <Code>startup</Code>, <Code>loop</Code>)
+          is a macro defined in the standard library — invoke it as <Code>stl.name</Code>.
+        </p>
         <table className="text-xs w-full mt-1" style={{ borderCollapse: 'collapse' }}>
           <tbody>
             {[
-              ['.startup <label>', 'Set the program entry point'],
-              ['segment <addr>', 'Set current assembly address'],
-              ['pad <align>', 'Align to next multiple of <align>'],
-              ['reserve <n>', 'Reserve <n> words of space'],
-              ['wflip <addr>, <val>', 'Set a jump target at compile time'],
-              ['rep <n>, <macro>', 'Repeat macro call n times'],
-              ['dbit <name>', 'Declare a 1-bit variable'],
-              ['dw <name>', 'Declare a word variable'],
+              ['def name args { body }', 'Define a macro'],
+              ['ns name { … }', 'Open a namespace block'],
+              ['rep(n, i) macro_call', 'Repeat a macro call n times with index i'],
+              ['wflip addr, value', 'Set a future jump target at compile time'],
+              ['pad align', 'Pad to the next multiple of align'],
+              ['segment addr', 'Set the current assembly address'],
+              ['reserve n', 'Reserve n bits of space'],
             ].map(([d, desc]) => (
               <tr key={d as string} style={{ borderBottom: '1px solid #333' }}>
                 <td className="pr-4 py-1"><Code>{d as string}</Code></td>
@@ -156,6 +160,11 @@ mylib.helper`}</Pre>
             ))}
           </tbody>
         </table>
+        <p className="mt-2" style={{ color: '#888', fontSize: 12 }}>
+          Predefined constants from <Code>runlib.fj</Code>: <Code>w</Code>{' '}
+          (word width, set at compile time), <Code>dw = 2*w</Code>,{' '}
+          <Code>dbit = w + #w</Code>.
+        </p>
       </Section>
 
       <Section title="Numeric Literals">
@@ -169,7 +178,7 @@ mylib.helper`}</Pre>
 
 stl.output_char 'H'
 stl.output_char 'i'
-stl.output_char 10        // newline
+stl.output_char '\\n'     // newline
 stl.loop                  // halt`}</Pre>
       </Section>
 
@@ -178,8 +187,8 @@ stl.loop                  // halt`}</Pre>
           <tbody>
             {[
               ['stl.startup', 'Boot the program — must be the first executable code'],
-              ['stl.output_char <byte>', 'Output one byte (e.g. an ASCII literal or 0x0a for newline)'],
-              ['stl.output "str"', 'Output a constant string of bytes (no escape sequences)'],
+              ["stl.output_char 'H'", "Output one byte. Char literals support '\\n', '\\t', '\\\\', etc. Numeric bytes (10, 0x0a) also work"],
+              ['stl.output "str"', 'Output a constant string of bytes (no escape sequences inside strings)'],
               ['stl.loop', 'Halt by looping in place'],
               ['stl.skip', 'No-op (skip the next flip-jump instruction)'],
               ['bit.input dst', 'Read one byte from stdin into a bit-vector variable'],
