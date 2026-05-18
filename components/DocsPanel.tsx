@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import StlViewer from './StlViewer';
 
 interface DocsPanelProps {
@@ -10,6 +10,17 @@ interface DocsPanelProps {
 
 export default function DocsPanel({ open, onClose }: DocsPanelProps) {
   const [tab, setTab] = useState<'ref' | 'stl'>('ref');
+
+  // Close on Escape when the panel is open. Full focus trapping is left
+  // for a follow-up (would justify pulling in @radix-ui/react-dialog).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   return (
     <>
@@ -25,6 +36,10 @@ export default function DocsPanel({ open, onClose }: DocsPanelProps) {
       {/* Panel */}
       <div
         className="fixed top-0 right-0 bottom-0 z-50 flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Documentation"
+        aria-hidden={!open}
         style={{
           width: 'clamp(400px, 42vw, 700px)',
           background: '#1e1e1e',

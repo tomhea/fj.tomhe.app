@@ -23,6 +23,7 @@ export default function FileTree({
 }: FileTreeProps) {
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -40,26 +41,43 @@ export default function FileTree({
   function startRename(file: FJFile) {
     setEditingId(file.id);
     setEditValue(file.name);
+    setEditError(null);
   }
 
   function startNew() {
     setEditingId('new');
     setEditValue('untitled.fj');
+    setEditError(null);
   }
 
   function commitEdit() {
-    if (!editValue.trim()) { cancelEdit(); return; }
-    const name = editValue.trim().endsWith('.fj') ? editValue.trim() : editValue.trim() + '.fj';
+    if (!editValue.trim()) {
+      cancelEdit();
+      return;
+    }
+    const trimmed = editValue.trim();
+    const name = trimmed.endsWith('.fj') ? trimmed : trimmed + '.fj';
+    // Reject duplicates so two files with the same name can't collide on
+    // the server tempdir (where they'd overwrite each other).
+    const collision = files.some(
+      (f) => f.name.toLowerCase() === name.toLowerCase() && f.id !== editingId,
+    );
+    if (collision) {
+      setEditError(`A file named "${name}" already exists.`);
+      return; // keep input open so the user can fix the name
+    }
     if (editingId === 'new') {
       onCreateFile(name);
     } else if (editingId) {
       onRenameFile(editingId, name);
     }
     setEditingId(null);
+    setEditError(null);
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setEditError(null);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -103,12 +121,15 @@ export default function FileTree({
                 <input
                   ref={inputRef}
                   value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
+                  onChange={(e) => { setEditValue(e.target.value); setEditError(null); }}
                   onKeyDown={handleKeyDown}
                   onBlur={commitEdit}
                   className="w-full px-1 text-xs rounded outline-none"
-                  style={{ background: '#3c3c3c', color: '#cccccc', border: '1px solid #0078d4' }}
+                  style={{ background: '#3c3c3c', color: '#cccccc', border: `1px solid ${editError ? '#f44747' : '#0078d4'}` }}
                 />
+                {editError && (
+                  <div className="mt-0.5 text-xs" style={{ color: '#f44747' }}>{editError}</div>
+                )}
               </div>
             ) : (
               <div
@@ -142,12 +163,15 @@ export default function FileTree({
             <input
               ref={inputRef}
               value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
+              onChange={(e) => { setEditValue(e.target.value); setEditError(null); }}
               onKeyDown={handleKeyDown}
               onBlur={commitEdit}
               className="w-full px-1 text-xs rounded outline-none"
-              style={{ background: '#3c3c3c', color: '#cccccc', border: '1px solid #0078d4' }}
+              style={{ background: '#3c3c3c', color: '#cccccc', border: `1px solid ${editError ? '#f44747' : '#0078d4'}` }}
             />
+            {editError && (
+              <div className="mt-0.5 text-xs" style={{ color: '#f44747' }}>{editError}</div>
+            )}
           </div>
         )}
 
