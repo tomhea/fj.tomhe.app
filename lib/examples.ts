@@ -32,7 +32,7 @@ stl.output_char 'r'
 stl.output_char 'l'
 stl.output_char 'd'
 stl.output_char '!'
-stl.output_char 10        // newline
+stl.output_char '\\n'
 stl.loop                  // halt (loop to self)
 `,
       },
@@ -58,7 +58,7 @@ stl.output_char '6'
 stl.output_char '7'
 stl.output_char '8'
 stl.output_char '9'
-stl.output_char 10
+stl.output_char '\\n'
 stl.loop
 `,
       },
@@ -100,7 +100,7 @@ stl.output_char 'w'
 stl.output_char 'x'
 stl.output_char 'y'
 stl.output_char 'z'
-stl.output_char 10
+stl.output_char '\\n'
 stl.loop
 `,
       },
@@ -117,7 +117,7 @@ stl.loop
 ns greet {
     def say_hi {
         stl.output "Hello from greet"
-        stl.output_char 10
+        stl.output_char '\\n'
     }
 }
 `,
@@ -160,7 +160,7 @@ stl.output_char 'C'
 stl.output_char 'D'
 stl.output_char 'E'
 stl.output_char 'F'
-stl.output_char 10
+stl.output_char '\\n'
 stl.loop
 `,
       },
