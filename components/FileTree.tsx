@@ -1,12 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { FJFile } from '@/lib/types';
+import { FJFile, SourceFile } from '@/lib/types';
 
 interface FileTreeProps {
   files: FJFile[];
   activeFileId: string;
+  sources: SourceFile[];
+  activeSourceIdx: number | null;
   onSelectFile: (id: string) => void;
+  onSelectSource: (idx: number) => void;
   onCreateFile: (name: string) => void;
   onRenameFile: (id: string, name: string) => void;
   onDeleteFile: (id: string) => void;
@@ -14,7 +17,9 @@ interface FileTreeProps {
 
 export default function FileTree({
   files, activeFileId,
-  onSelectFile, onCreateFile, onRenameFile, onDeleteFile,
+  sources, activeSourceIdx,
+  onSelectFile, onSelectSource,
+  onCreateFile, onRenameFile, onDeleteFile,
 }: FileTreeProps) {
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -25,7 +30,6 @@ export default function FileTree({
     if (editingId) inputRef.current?.focus();
   }, [editingId]);
 
-  // Close context menu on outside click
   useEffect(() => {
     if (!contextMenu) return;
     const handler = () => setContextMenu(null);
@@ -90,7 +94,7 @@ export default function FileTree({
         </button>
       </div>
 
-      {/* File list */}
+      {/* FJ File list */}
       <div className="flex-1 overflow-y-auto py-1">
         {files.map((file) => (
           <div key={file.id}>
@@ -113,19 +117,19 @@ export default function FileTree({
                 onContextMenu={(e) => handleContextMenu(e, file.id)}
                 className="flex items-center gap-1.5 px-3 py-0.5 cursor-pointer text-xs truncate transition-colors"
                 style={{
-                  background: file.id === activeFileId ? '#094771' : 'transparent',
-                  color: file.id === activeFileId ? '#ffffff' : '#cccccc',
+                  background: file.id === activeFileId && activeSourceIdx === null ? '#094771' : 'transparent',
+                  color: file.id === activeFileId && activeSourceIdx === null ? '#ffffff' : '#cccccc',
                 }}
                 onMouseEnter={(e) => {
-                  if (file.id !== activeFileId)
+                  if (!(file.id === activeFileId && activeSourceIdx === null))
                     (e.currentTarget as HTMLDivElement).style.background = '#2a2d2e';
                 }}
                 onMouseLeave={(e) => {
-                  if (file.id !== activeFileId)
+                  if (!(file.id === activeFileId && activeSourceIdx === null))
                     (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                 }}
               >
-                <FjFileIcon active={file.id === activeFileId} />
+                <FjFileIcon active={file.id === activeFileId && activeSourceIdx === null} />
                 <span className="truncate">{file.name}</span>
               </div>
             )}
@@ -145,6 +149,43 @@ export default function FileTree({
               style={{ background: '#3c3c3c', color: '#cccccc', border: '1px solid #0078d4' }}
             />
           </div>
+        )}
+
+        {/* Sources section */}
+        {sources.length > 0 && (
+          <>
+            <div
+              className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-widest"
+              style={{ color: '#666' }}
+            >
+              Sources
+            </div>
+            {sources.map((src, idx) => (
+              <div
+                key={idx}
+                onClick={() => onSelectSource(idx)}
+                className="flex items-center gap-1.5 px-3 py-0.5 cursor-pointer text-xs truncate"
+                style={{
+                  background: activeSourceIdx === idx ? '#094771' : 'transparent',
+                  color: activeSourceIdx === idx ? '#fff' : '#aaaaaa',
+                }}
+                onMouseEnter={e => {
+                  if (activeSourceIdx !== idx)
+                    (e.currentTarget as HTMLDivElement).style.background = '#2a2d2e';
+                }}
+                onMouseLeave={e => {
+                  if (activeSourceIdx !== idx)
+                    (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                }}
+              >
+                {src.type === 'bf' ? <BfIcon /> : <CSourceIcon />}
+                <span className="truncate">{src.name}</span>
+                <span className="ml-auto shrink-0 text-xs" style={{ color: '#555', fontSize: 10 }}>
+                  {src.type.toUpperCase()}
+                </span>
+              </div>
+            ))}
+          </>
         )}
       </div>
 
@@ -173,7 +214,7 @@ export default function FileTree({
             label="Delete"
             danger
             onClick={() => {
-              if (files.length === 1) return; // don't delete last file
+              if (files.length === 1) return;
               onDeleteFile(contextMenu.id);
               setContextMenu(null);
             }}
@@ -209,11 +250,29 @@ function FjFileIcon({ active }: { active: boolean }) {
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
       <path
         d="M3 2h7l4 4v8H3V2z"
-        stroke={active ? '#73c991' : '#73c991'}
+        stroke="#73c991"
         strokeWidth="1.2"
         fill={active ? '#1e3a2a' : 'transparent'}
       />
-      <path d="M10 2v4h4" stroke={active ? '#73c991' : '#73c991'} strokeWidth="1.2" />
+      <path d="M10 2v4h4" stroke="#73c991" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function BfIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+      <path d="M3 2h7l4 4v8H3V2z" stroke="#b5a0e8" strokeWidth="1.2" />
+      <path d="M10 2v4h4" stroke="#b5a0e8" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function CSourceIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+      <path d="M3 2h7l4 4v8H3V2z" stroke="#5aa4e8" strokeWidth="1.2" />
+      <path d="M10 2v4h4" stroke="#5aa4e8" strokeWidth="1.2" />
     </svg>
   );
 }

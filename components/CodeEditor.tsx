@@ -1,28 +1,67 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { FJFile } from '@/lib/types';
+import { FJFile, MonacoMarker } from '@/lib/types';
 import dynamic from 'next/dynamic';
 import type { OnMount } from '@monaco-editor/react';
 
-// Monaco must be loaded client-side only
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
 interface CodeEditorProps {
   file: FJFile | undefined;
   onChange: (content: string) => void;
+  markers?: MonacoMarker[];
+  readOnly?: boolean;
+  overrideLanguage?: string;
 }
 
-export default function CodeEditor({ file, onChange }: CodeEditorProps) {
-  const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
+type MonacoInstance = Parameters<OnMount>[1];
+
+function languageForFile(name: string, override?: string): string {
+  if (override) return override;
+  if (name.endsWith('.fj')) return 'flipjump';
+  if (name.endsWith('.bf') || name.endsWith('.b')) return 'brainfuck';
+  if (name.endsWith('.c') || name.endsWith('.cpp') || name.endsWith('.h')) return 'c';
+  if (name.endsWith('.md')) return 'markdown';
+  return 'plaintext';
+}
+
+export default function CodeEditor({ file, onChange, markers, readOnly, overrideLanguage }: CodeEditorProps) {
+  const monacoRef = useRef<MonacoInstance | null>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 
   const handleMount: OnMount = (editor, monaco) => {
     monacoRef.current = monaco;
-    registerFlipJumpLanguage(monaco);
+    editorRef.current = editor;
+    registerLanguages(monaco);
   };
 
-  // When the active file changes, no need to do anything special —
-  // the `value` prop on MonacoEditor is controlled.
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    if (!monaco || !editor || !file) return;
+
+    const model = editor.getModel();
+    if (!model) return;
+
+    if (!markers?.length) {
+      monaco.editor.setModelMarkers(model, 'fj-compiler', []);
+      return;
+    }
+
+    const monacoMarkers = markers
+      .filter(m => m.filename === file.name)
+      .map(m => ({
+        severity: monaco.MarkerSeverity.Error,
+        startLineNumber: m.startLine,
+        startColumn: m.startCol,
+        endLineNumber: m.endLine ?? m.startLine,
+        endColumn: m.endCol ?? 999,
+        message: m.message,
+        source: 'fj-compiler',
+      }));
+    monaco.editor.setModelMarkers(model, 'fj-compiler', monacoMarkers);
+  }, [markers, file]);
 
   if (!file) {
     return (
@@ -35,15 +74,17 @@ export default function CodeEditor({ file, onChange }: CodeEditorProps) {
     );
   }
 
+  const lang = languageForFile(file.name, overrideLanguage);
+
   return (
     <div className="flex-1 min-h-0" style={{ background: '#1e1e1e' }}>
       <MonacoEditor
         key={file.id}
         height="100%"
-        language="flipjump"
+        language={lang}
         theme="fj-dark"
         value={file.content}
-        onChange={(val) => onChange(val ?? '')}
+        onChange={(val) => { if (!readOnly) onChange(val ?? ''); }}
         onMount={handleMount}
         options={{
           fontSize: 14,
@@ -61,16 +102,20 @@ export default function CodeEditor({ file, onChange }: CodeEditorProps) {
           bracketPairColorization: { enabled: true },
           suggestOnTriggerCharacters: true,
           quickSuggestions: false,
+          readOnly: readOnly ?? false,
         }}
       />
     </div>
   );
 }
 
-function registerFlipJumpLanguage(monaco: Parameters<OnMount>[1]) {
-  // Avoid double-registration
-  const existing = monaco.languages.getLanguages().find((l: { id: string }) => l.id === 'flipjump');
-  if (existing) return;
+function registerLanguages(monaco: MonacoInstance) {
+  registerFlipJumpLanguage(monaco);
+  registerBrainfuckLanguage(monaco);
+}
+
+function registerFlipJumpLanguage(monaco: MonacoInstance) {
+  if (monaco.languages.getLanguages().find((l: { id: string }) => l.id === 'flipjump')) return;
 
   monaco.languages.register({ id: 'flipjump', extensions: ['.fj'], aliases: ['FlipJump', 'flipjump'] });
 
@@ -78,51 +123,60 @@ function registerFlipJumpLanguage(monaco: Parameters<OnMount>[1]) {
     defaultToken: '',
     tokenPostfix: '.fj',
 
-    keywords: [
-      'wflip', 'fj', 'pad', 'rep', 'nop', 'halt', 'output', 'input',
-      'startup', 'segment', 'org', 'bit', 'macro', 'end', 'def',
-    ],
-
-    operators: ['+', '-', '*', '/', '%', '<<', '>>', '&', '|', '^', '~'],
+    keywords:   ['ns', 'rep'],
+    types:      ['dbit', 'dw', 'w'],
+    directives: ['pad', 'reserve', 'segment', 'wflip'],
 
     tokenizer: {
       root: [
-        // Comments
+        // Line comment: // only
         [/\/\/.*$/, 'comment'],
-        [/;.*$/, 'comment'],
-        [/#.*$/, 'comment'],
 
-        // Labels (word followed by colon)
+        // def keyword → next identifier is the macro name
+        [/\bdef\b/, { token: 'keyword', next: '@afterDef' }],
+
+        // Labels: identifier immediately before ':'
         [/[A-Za-z_][\w.]*(?=\s*:)/, 'type'],
 
-        // Preprocessor-style directives
-        [/\.(startup|segment|org|pad|rep|bit|macro|end|def|var|reserve)\b/, 'keyword'],
+        // Constants: identifier immediately before '='  (strict: no dots)
+        [/[A-Za-z_]\w*(?=\s*=)/, 'variable.constant'],
 
-        // Named keywords
-        [/\b(wflip|fj|pad|rep|nop|halt|output|input)\b/, 'keyword.flow'],
+        // Identifiers: keywords, types, directives, or plain identifiers (allow dots for namespaces)
+        [/[A-Za-z_][\w.]*/, {
+          cases: {
+            '@keywords':   'keyword',
+            '@types':      'type',
+            '@directives': 'keyword.control',
+            '@default':    'identifier',
+          },
+        }],
 
-        // Hex numbers
-        [/\b0x[0-9a-fA-F]+\b/, 'number.hex'],
+        // ; is the flip-jump separator (keywords3)
+        [/;/, 'keyword.control'],
+        // , is keywords1
+        [/,/, 'keyword'],
 
-        // Binary numbers
-        [/\b0b[01]+\b/, 'number'],
-
-        // Decimal numbers
-        [/\b\d+\b/, 'number'],
+        // Numbers
+        [/0x[0-9a-fA-F]+/, 'number.hex'],
+        [/0b[01]+/, 'number'],
+        [/\d+/, 'number'],
 
         // Strings
         [/"([^"\\]|\\.)*"/, 'string'],
         [/'([^'\\]|\\.)*'/, 'string'],
 
-        // Identifiers
-        [/[A-Za-z_][\w.]*/, 'identifier'],
+        // Operators (keywords4)
+        [/[!=<>?@^|%&*+\-/:#]/, 'operator'],
 
-        // Punctuation
-        [/[,;:]/, 'delimiter'],
+        // Brackets
         [/[()[\]{}]/, 'delimiter.bracket'],
+      ],
 
-        // Operators
-        [/[+\-*/%&|^~<>]/, 'operator'],
+      // State entered after 'def': color the following identifier as macro name
+      afterDef: [
+        [/\s+/, ''],
+        [/[A-Za-z_]\w*/, { token: 'entity.name.function', next: '@pop' }],
+        [/./, { token: '', next: '@pop' }],
       ],
     },
   });
@@ -131,26 +185,46 @@ function registerFlipJumpLanguage(monaco: Parameters<OnMount>[1]) {
     base: 'vs-dark',
     inherit: true,
     rules: [
-      { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
-      { token: 'keyword', foreground: '569cd6', fontStyle: 'bold' },
-      { token: 'keyword.flow', foreground: 'c586c0' },
-      { token: 'type', foreground: '4ec9b0' },           // labels
-      { token: 'number', foreground: 'b5cea8' },
-      { token: 'number.hex', foreground: 'b5cea8' },
-      { token: 'string', foreground: 'ce9178' },
-      { token: 'identifier', foreground: '9cdcfe' },
-      { token: 'operator', foreground: 'd4d4d4' },
-      { token: 'delimiter', foreground: 'd4d4d4' },
+      { token: 'comment',              foreground: '6a9955', fontStyle: 'italic' },
+      { token: 'keyword',              foreground: '569cd6', fontStyle: 'bold' },  // def ns rep ,
+      { token: 'type',                 foreground: '4ec9b0' },                     // labels + dbit dw w
+      { token: 'keyword.control',      foreground: 'e07b39' },                     // pad reserve segment wflip ;
+      { token: 'entity.name.function', foreground: '56c8c8' },                     // macro name after def
+      { token: 'variable.constant',    foreground: 'c792ea' },                     // constant LHS (name = value)
+      { token: 'number',               foreground: 'b5cea8' },
+      { token: 'number.hex',           foreground: 'b5cea8' },
+      { token: 'string',               foreground: 'ce9178' },
+      { token: 'identifier',           foreground: '9cdcfe' },
+      { token: 'operator',             foreground: 'd4d4d4' },
+      { token: 'delimiter.bracket',    foreground: 'd4d4d4' },
     ],
     colors: {
-      'editor.background': '#1e1e1e',
-      'editor.foreground': '#d4d4d4',
-      'editorLineNumber.foreground': '#858585',
-      'editorCursor.foreground': '#aeafad',
-      'editor.selectionBackground': '#264f78',
+      'editor.background':            '#1e1e1e',
+      'editor.foreground':            '#d4d4d4',
+      'editorLineNumber.foreground':  '#858585',
+      'editorCursor.foreground':      '#aeafad',
+      'editor.selectionBackground':   '#264f78',
       'editor.lineHighlightBackground': '#2a2a2a',
     },
   });
 
   monaco.editor.setTheme('fj-dark');
+}
+
+function registerBrainfuckLanguage(monaco: MonacoInstance) {
+  if (monaco.languages.getLanguages().find((l: { id: string }) => l.id === 'brainfuck')) return;
+
+  monaco.languages.register({ id: 'brainfuck', extensions: ['.bf', '.b'], aliases: ['Brainfuck', 'brainfuck'] });
+
+  monaco.languages.setMonarchTokensProvider('brainfuck', {
+    defaultToken: 'comment',
+    tokenizer: {
+      root: [
+        [/[+\-]/, 'number'],
+        [/[<>]/, 'keyword'],
+        [/[[\]]/, 'delimiter.bracket'],
+        [/[.,]/, 'string'],
+      ],
+    },
+  });
 }

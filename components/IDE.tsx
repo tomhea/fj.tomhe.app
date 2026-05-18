@@ -6,7 +6,10 @@ import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
 import Terminal from './Terminal';
 import Toolbar from './Toolbar';
-import { FJFile, TerminalLine, CompileStatus, RunStatus, ServerMessage } from '@/lib/types';
+import DocsPanel from './DocsPanel';
+import { FJFile, SourceFile, TerminalLine, CompileStatus, RunStatus, ServerMessage, MonacoMarker } from '@/lib/types';
+import { EXAMPLES, Example } from '@/lib/examples';
+import { encodeShare, decodeShare } from '@/lib/share';
 
 const EXAMPLE_FJ = `; FlipJump Hello World
 ; ----------------------
@@ -37,23 +40,109 @@ main:
     halt
 `;
 
-const DEFAULT_FILE: FJFile = {
-  id: uuidv4(),
-  name: 'main.fj',
-  content: EXAMPLE_FJ,
-};
+function makeDefaultFile(): FJFile {
+  return { id: uuidv4(), name: 'main.fj', content: EXAMPLE_FJ };
+}
 
 let lineCounter = 0;
 function nextLineId() { return ++lineCounter; }
 
+function parseMarkers(stderr: string): MonacoMarker[] {
+  const markers: MonacoMarker[] = [];
+  const re = /^(.+?):(\d+)(?::(\d+))?:\s*(?:Error|error|Warning|warning):\s*(.+)$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stderr)) !== null) {
+    markers.push({
+      filename: m[1].split('/').pop() ?? m[1],
+      startLine: parseInt(m[2], 10),
+      startCol: m[3] ? parseInt(m[3], 10) : 1,
+      message: m[4],
+    });
+  }
+  return markers;
+}
+
+function loadFromLocalStorage<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveToLocalStorage(key: string, value: unknown) {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota exceeded */ }
+}
+
 export default function IDE() {
-  const [files, setFiles] = useState<FJFile[]>([DEFAULT_FILE]);
-  const [activeFileId, setActiveFileId] = useState<string>(DEFAULT_FILE.id);
+  // ── Initialise from URL share param or localStorage ──────────────────────
+  function initFiles(): FJFile[] {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const shared = params.get('share');
+      if (shared) {
+        const decoded = decodeShare(shared);
+        if (decoded) return decoded.map(f => ({ ...f, id: uuidv4() }));
+      }
+      const saved = loadFromLocalStorage<FJFile[]>('fj-ide-files');
+      if (saved?.length) return saved;
+    }
+    return [makeDefaultFile()];
+  }
+
+  function initSources(): SourceFile[] {
+    return loadFromLocalStorage<SourceFile[]>('fj-ide-sources') ?? [];
+  }
+
+  const [files, setFiles] = useState<FJFile[]>(initFiles);
+  const [activeFileId, setActiveFileId] = useState<string>(() => {
+    const f = initFiles();
+    return f[0]?.id ?? '';
+  });
+  const [sources, setSources] = useState<SourceFile[]>(initSources);
+  const [activeSourceIdx, setActiveSourceIdx] = useState<number | null>(null);
   const [compiledFjm, setCompiledFjm] = useState<string | null>(null);
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const [compileStatus, setCompileStatus] = useState<CompileStatus>('idle');
   const [runStatus, setRunStatus] = useState<RunStatus>('idle');
+  const [stdinContent, setStdinContent] = useState('');
+  const [markers, setMarkers] = useState<MonacoMarker[]>([]);
+  const [docsOpen, setDocsOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const runStartRef = useRef<number>(0);
+  const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Persist files to localStorage ────────────────────────────────────────
+  useEffect(() => { saveToLocalStorage('fj-ide-files', files); }, [files]);
+  useEffect(() => { saveToLocalStorage('fj-ide-sources', sources); }, [sources]);
+
+  // ── Update share URL (debounced 1s) ──────────────────────────────────────
+  useEffect(() => {
+    if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
+    shareTimerRef.current = setTimeout(() => {
+      const encoded = encodeShare(files);
+      if (encoded.length < 200_000) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('share', encoded);
+        window.history.replaceState(null, '', url.toString());
+      }
+    }, 1000);
+    return () => { if (shareTimerRef.current) clearTimeout(shareTimerRef.current); };
+  }, [files]);
+
+  // ── Auto-run Hello World on very first visit ──────────────────────────────
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!localStorage.getItem('fj-visited')) {
+      localStorage.setItem('fj-visited', '1');
+      const timer = setTimeout(() => runOnline('fj'), 1000);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addLine = useCallback((type: TerminalLine['type'], text: string) => {
     setTerminalLines(prev => [...prev, { type, text, id: nextLineId() }]);
@@ -61,17 +150,38 @@ export default function IDE() {
 
   const clearTerminal = useCallback(() => setTerminalLines([]), []);
 
+  // ── Active view: FJ file or source ───────────────────────────────────────
   const activeFile = files.find(f => f.id === activeFileId) ?? files[0];
+
+  const viewFile: FJFile | undefined = activeSourceIdx !== null && sources[activeSourceIdx]
+    ? { id: `source-${activeSourceIdx}`, name: sources[activeSourceIdx].name, content: sources[activeSourceIdx].content }
+    : activeFile;
+
+  const viewReadOnly = activeSourceIdx !== null;
+  const viewLanguage = activeSourceIdx !== null
+    ? (sources[activeSourceIdx]?.type === 'bf' ? 'brainfuck' : 'c')
+    : undefined;
+
+  function selectFile(id: string) {
+    setActiveFileId(id);
+    setActiveSourceIdx(null);
+  }
+
+  function selectSource(idx: number) {
+    setActiveSourceIdx(idx);
+  }
 
   const updateFileContent = useCallback((id: string, content: string) => {
     setFiles(prev => prev.map(f => f.id === id ? { ...f, content } : f));
-    setCompiledFjm(null); // invalidate when files change
+    setCompiledFjm(null);
+    setMarkers([]);
   }, []);
 
   const createFile = useCallback((name: string) => {
     const f: FJFile = { id: uuidv4(), name, content: `; ${name}\n` };
     setFiles(prev => [...prev, f]);
     setActiveFileId(f.id);
+    setActiveSourceIdx(null);
   }, []);
 
   const renameFile = useCallback((id: string, name: string) => {
@@ -103,7 +213,7 @@ export default function IDE() {
           lastId = f.id;
         }
       }
-      if (lastId) setActiveFileId(lastId);
+      if (lastId) { setActiveFileId(lastId); setActiveSourceIdx(null); }
       return updated;
     });
   }, []);
@@ -112,10 +222,29 @@ export default function IDE() {
     importFjFiles([{ name, content }]);
   }, [importFjFiles]);
 
-  // ── Compile ──────────────────────────────────────────────────────────────
+  const loadExample = useCallback((ex: Example) => {
+    const newFiles = ex.files.map(f => ({ ...f, id: uuidv4() }));
+    setFiles(newFiles);
+    setActiveFileId(newFiles[0].id);
+    setActiveSourceIdx(null);
+    setCompiledFjm(null);
+    setMarkers([]);
+  }, []);
+
+  const importFjm = useCallback((base64: string) => {
+    setCompiledFjm(base64);
+    addLine('info', '↑ Loaded program.fjm');
+  }, [addLine]);
+
+  const copyLink = useCallback(() => {
+    navigator.clipboard.writeText(window.location.href).catch(() => {});
+  }, []);
+
+  // ── Compile ───────────────────────────────────────────────────────────────
 
   const doCompile = useCallback(async (): Promise<string | null> => {
     setCompileStatus('compiling');
+    setMarkers([]);
     addLine('info', '⟶ Compiling…');
     try {
       const res = await fetch('/api/compile', {
@@ -127,7 +256,10 @@ export default function IDE() {
         success: boolean; fjmBase64?: string; stderr?: string; error?: string;
       };
 
-      if (data.stderr?.trim()) addLine('stderr', data.stderr.trim());
+      if (data.stderr?.trim()) {
+        addLine('stderr', data.stderr.trim());
+        setMarkers(parseMarkers(data.stderr));
+      }
 
       if (data.success && data.fjmBase64) {
         setCompiledFjm(data.fjmBase64);
@@ -148,7 +280,7 @@ export default function IDE() {
 
   const compile = useCallback(async () => { await doCompile(); }, [doCompile]);
 
-  // ── Download FJM ─────────────────────────────────────────────────────────
+  // ── Download FJM ──────────────────────────────────────────────────────────
 
   const downloadFjm = useCallback(async () => {
     let fjm = compiledFjm;
@@ -166,9 +298,14 @@ export default function IDE() {
     addLine('info', '↓ Downloaded program.fjm');
   }, [compiledFjm, doCompile, addLine]);
 
-  // ── Import BF ────────────────────────────────────────────────────────────
+  // ── Import BF ─────────────────────────────────────────────────────────────
 
   const importBf = useCallback(async (content: string, filename: string) => {
+    setSources(prev => {
+      const existing = prev.findIndex(s => s.name === filename && s.type === 'bf');
+      const entry: SourceFile = { name: filename, type: 'bf', content };
+      return existing >= 0 ? prev.map((s, i) => i === existing ? entry : s) : [...prev, entry];
+    });
     addLine('info', `⟶ Converting ${filename} via bf2fj…`);
     try {
       const res = await fetch('/api/bf2fj', {
@@ -190,10 +327,19 @@ export default function IDE() {
     }
   }, [importSingleFj, addLine]);
 
-  // ── Import C ─────────────────────────────────────────────────────────────
+  // ── Import C ──────────────────────────────────────────────────────────────
 
   const importC = useCallback(async (formData: FormData) => {
     const file = formData.get('file') as File;
+    const isZip = file?.name.endsWith('.zip');
+    if (file) {
+      const content = isZip ? '(zip archive)' : await file.text();
+      setSources(prev => {
+        const entry: SourceFile = { name: file.name, type: 'c', content };
+        const existing = prev.findIndex(s => s.name === file.name && s.type === 'c');
+        return existing >= 0 ? prev.map((s, i) => i === existing ? entry : s) : [...prev, entry];
+      });
+    }
     addLine('info', `⟶ Converting ${file?.name ?? 'C project'} via c2fj…`);
     try {
       const res = await fetch('/api/c2fj', { method: 'POST', body: formData });
@@ -229,12 +375,17 @@ export default function IDE() {
     ws.onopen = () => {
       if (mode === 'fjm' && compiledFjm) {
         addLine('info', '⟶ Running compiled FJM…');
-        ws.send(JSON.stringify({ type: 'run_fjm', fjmBase64: compiledFjm }));
+        ws.send(JSON.stringify({
+          type: 'run_fjm',
+          fjmBase64: compiledFjm,
+          initialStdin: stdinContent || undefined,
+        }));
       } else {
         addLine('info', '⟶ Compiling and running…');
         ws.send(JSON.stringify({
           type: 'run_fj',
           files: files.map(f => ({ name: f.name, content: f.content })),
+          initialStdin: stdinContent || undefined,
         }));
       }
     };
@@ -243,6 +394,7 @@ export default function IDE() {
       const msg = JSON.parse(event.data) as ServerMessage;
       switch (msg.type) {
         case 'started':
+          runStartRef.current = Date.now();
           break;
         case 'stdout':
           addLine('stdout', msg.data);
@@ -250,15 +402,17 @@ export default function IDE() {
         case 'stderr':
           addLine('stderr', msg.data);
           break;
-        case 'exit':
+        case 'exit': {
+          const elapsed = ((Date.now() - runStartRef.current) / 1000).toFixed(2);
           addLine('info',
             msg.code === 0
-              ? '✓ Process exited (code 0).'
-              : `Process exited with code ${msg.code ?? '?'}.`
+              ? `✓ Process exited (code 0) — ${elapsed}s`
+              : `Process exited with code ${msg.code ?? '?'} — ${elapsed}s`
           );
           setRunStatus('exited');
           wsRef.current = null;
           break;
+        }
         case 'error':
           addLine('error', msg.data);
           setRunStatus('error');
@@ -277,12 +431,12 @@ export default function IDE() {
       setRunStatus(s => s === 'running' ? 'exited' : s);
       wsRef.current = null;
     };
-  }, [runStatus, compiledFjm, files, clearTerminal, addLine]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runStatus, compiledFjm, files, stdinContent, clearTerminal, addLine]);
 
   const sendStdin = useCallback((input: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'stdin', stdin: input }));
-      // Echo stdin to terminal
       addLine('info', `> ${input.trimEnd()}`);
     }
   }, [addLine]);
@@ -305,13 +459,20 @@ export default function IDE() {
         onImportBf={importBf}
         onImportC={importC}
         onImportFj={importFjFiles}
+        onImportFjm={importFjm}
+        onLoadExample={loadExample}
+        onCopyLink={copyLink}
+        onOpenDocs={() => setDocsOpen(true)}
       />
 
       <div className="flex flex-1 min-h-0">
         <FileTree
           files={files}
           activeFileId={activeFileId}
-          onSelectFile={setActiveFileId}
+          sources={sources}
+          activeSourceIdx={activeSourceIdx}
+          onSelectFile={selectFile}
+          onSelectSource={selectSource}
           onCreateFile={createFile}
           onRenameFile={renameFile}
           onDeleteFile={deleteFile}
@@ -319,8 +480,15 @@ export default function IDE() {
 
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
           <CodeEditor
-            file={activeFile}
-            onChange={(content) => updateFileContent(activeFile?.id ?? '', content)}
+            file={viewFile}
+            onChange={(content) => {
+              if (activeSourceIdx === null && activeFile) {
+                updateFileContent(activeFile.id, content);
+              }
+            }}
+            markers={markers}
+            readOnly={viewReadOnly}
+            overrideLanguage={viewLanguage}
           />
           <Terminal
             lines={terminalLines}
@@ -328,9 +496,13 @@ export default function IDE() {
             onSendStdin={sendStdin}
             onClear={clearTerminal}
             onKill={killProcess}
+            stdinContent={stdinContent}
+            onStdinContentChange={setStdinContent}
           />
         </div>
       </div>
+
+      <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} />
     </div>
   );
 }

@@ -1,0 +1,174 @@
+{
+  "files": [
+    {
+      "path": "bit/casting.fj",
+      "name": "casting.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/cond_jumps.fj",
+      "name": "cond_jumps.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/div.fj",
+      "name": "div.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/input.fj",
+      "name": "input.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/logics.fj",
+      "name": "logics.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/math.fj",
+      "name": "math.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/memory.fj",
+      "name": "memory.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/mul.fj",
+      "name": "mul.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/output.fj",
+      "name": "output.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/pointers.fj",
+      "name": "pointers.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "bit/shifts.fj",
+      "name": "shifts.fj",
+      "dir": "bit"
+    },
+    {
+      "path": "casting.fj",
+      "name": "casting.fj",
+      "dir": ""
+    },
+    {
+      "path": "hex/cond_jumps.fj",
+      "name": "cond_jumps.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/div.fj",
+      "name": "div.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/input.fj",
+      "name": "input.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/logics.fj",
+      "name": "logics.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/math_basic.fj",
+      "name": "math_basic.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/math.fj",
+      "name": "math.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/memory.fj",
+      "name": "memory.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/mul.fj",
+      "name": "mul.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/output.fj",
+      "name": "output.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/pointers/basic_pointers.fj",
+      "name": "basic_pointers.fj",
+      "dir": "hex/pointers"
+    },
+    {
+      "path": "hex/pointers/pointer_arithmetics.fj",
+      "name": "pointer_arithmetics.fj",
+      "dir": "hex/pointers"
+    },
+    {
+      "path": "hex/pointers/read_pointers.fj",
+      "name": "read_pointers.fj",
+      "dir": "hex/pointers"
+    },
+    {
+      "path": "hex/pointers/stack.fj",
+      "name": "stack.fj",
+      "dir": "hex/pointers"
+    },
+    {
+      "path": "hex/pointers/write_pointers.fj",
+      "name": "write_pointers.fj",
+      "dir": "hex/pointers"
+    },
+    {
+      "path": "hex/pointers/xor_from_pointer.fj",
+      "name": "xor_from_pointer.fj",
+      "dir": "hex/pointers"
+    },
+    {
+      "path": "hex/pointers/xor_to_pointer.fj",
+      "name": "xor_to_pointer.fj",
+      "dir": "hex/pointers"
+    },
+    {
+      "path": "hex/shifts.fj",
+      "name": "shifts.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "hex/tables_init.fj",
+      "name": "tables_init.fj",
+      "dir": "hex"
+    },
+    {
+      "path": "ptrlib.fj",
+      "name": "ptrlib.fj",
+      "dir": ""
+    },
+    {
+      "path": "README.md",
+      "name": "README.md",
+      "dir": ""
+    },
+    {
+      "path": "runlib.fj",
+      "name": "runlib.fj",
+      "dir": ""
+    }
+  ],
+  "dirs": [
+    "bit",
+    "hex",
+    "hex/pointers"
+  ]
+}
