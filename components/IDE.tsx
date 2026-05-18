@@ -20,33 +20,32 @@ import { Example } from '@/lib/examples';
 import { encodeShare, decodeShare } from '@/lib/share';
 import { parseMarkers } from '@/lib/parse-markers';
 
-const EXAMPLE_FJ = `; FlipJump Hello World
-; ----------------------
-; The FlipJump language has a single instruction: f;j
-;   - Flip the bit at address f
-;   - Then jump to address j
-;
-; This example uses the standard library macros.
-; Modify the files and click "Run FJ" to execute.
+const EXAMPLE_FJ = `// FlipJump Hello World
+// ----------------------
+// The FlipJump language has a single instruction: f;j
+//   - Flip the bit at address f
+//   - Then jump to address j
+//
+// stl.* macros come from the FlipJump standard library.
+// Modify the file and click "Run FJ" to execute.
 
-.startup main
+stl.startup
 
-main:
-    output 'H'
-    output 'e'
-    output 'l'
-    output 'l'
-    output 'o'
-    output ','
-    output ' '
-    output 'W'
-    output 'o'
-    output 'r'
-    output 'l'
-    output 'd'
-    output '!'
-    output '\\n'
-    halt
+stl.output_char 'H'
+stl.output_char 'e'
+stl.output_char 'l'
+stl.output_char 'l'
+stl.output_char 'o'
+stl.output_char ','
+stl.output_char ' '
+stl.output_char 'W'
+stl.output_char 'o'
+stl.output_char 'r'
+stl.output_char 'l'
+stl.output_char 'd'
+stl.output_char '!'
+stl.output_char 10        // newline
+stl.loop                  // halt (loop to self)
 `;
 
 function makeDefaultFile(): FJFile {
@@ -192,7 +191,9 @@ export default function IDE() {
   }, []);
 
   const createFile = useCallback((name: string) => {
-    const f: FJFile = { id: uuidv4(), name, content: `; ${name}\n` };
+    // FJ comments are `//`. `;` is the flip-jump separator and would be
+    // parsed as a (broken) half-instruction.
+    const f: FJFile = { id: uuidv4(), name, content: `// ${name}\n` };
     setFiles((prev) => [...prev, f]);
     setActiveFileId(f.id);
     setActiveSourceIdx(null);

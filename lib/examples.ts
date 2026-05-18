@@ -8,101 +8,103 @@ export const EXAMPLES: Example[] = [
   {
     name: 'Hello World',
     description: 'Print "Hello, World!" to the terminal.',
-    files: [{
-      name: 'hello.fj',
-      content: `; FlipJump Hello World
-; The FlipJump language has a single instruction: f;j
-;   - Flip the bit at address f
-;   - Then jump to address j
-;
-; This example uses standard library macros.
+    files: [
+      {
+        name: 'hello.fj',
+        content: `// FlipJump Hello World
+// The language has a single instruction: f;j
+//   - Flip the bit at address f
+//   - Then jump to address j
+// stl.* macros come from the FlipJump standard library.
 
-.startup main
+stl.startup
 
-main:
-    output 'H'
-    output 'e'
-    output 'l'
-    output 'l'
-    output 'o'
-    output ','
-    output ' '
-    output 'W'
-    output 'o'
-    output 'r'
-    output 'l'
-    output 'd'
-    output '!'
-    output '\\n'
-    halt
+stl.output_char 'H'
+stl.output_char 'e'
+stl.output_char 'l'
+stl.output_char 'l'
+stl.output_char 'o'
+stl.output_char ','
+stl.output_char ' '
+stl.output_char 'W'
+stl.output_char 'o'
+stl.output_char 'r'
+stl.output_char 'l'
+stl.output_char 'd'
+stl.output_char '!'
+stl.output_char 10        // newline
+stl.loop                  // halt (loop to self)
 `,
-    }],
+      },
+    ],
   },
   {
     name: 'Counter (0–9)',
     description: 'Count from 0 to 9 and print each digit.',
-    files: [{
-      name: 'counter.fj',
-      content: `; Count from 0 to 9
+    files: [
+      {
+        name: 'counter.fj',
+        content: `// Count from 0 to 9.
 
-.startup main
+stl.startup
 
-main:
-    output '0'
-    output '1'
-    output '2'
-    output '3'
-    output '4'
-    output '5'
-    output '6'
-    output '7'
-    output '8'
-    output '9'
-    output '\\n'
-    halt
+stl.output_char '0'
+stl.output_char '1'
+stl.output_char '2'
+stl.output_char '3'
+stl.output_char '4'
+stl.output_char '5'
+stl.output_char '6'
+stl.output_char '7'
+stl.output_char '8'
+stl.output_char '9'
+stl.output_char 10
+stl.loop
 `,
-    }],
+      },
+    ],
   },
   {
     name: 'Alphabet',
     description: 'Print the lowercase alphabet a–z.',
-    files: [{
-      name: 'alphabet.fj',
-      content: `; Print the lowercase alphabet a-z
+    files: [
+      {
+        name: 'alphabet.fj',
+        content: `// Print the lowercase alphabet a-z.
 
-.startup main
+stl.startup
 
-main:
-    output 'a'
-    output 'b'
-    output 'c'
-    output 'd'
-    output 'e'
-    output 'f'
-    output 'g'
-    output 'h'
-    output 'i'
-    output 'j'
-    output 'k'
-    output 'l'
-    output 'm'
-    output 'n'
-    output 'o'
-    output 'p'
-    output 'q'
-    output 'r'
-    output 's'
-    output 't'
-    output 'u'
-    output 'v'
-    output 'w'
-    output 'x'
-    output 'y'
-    output 'z'
-    output '\\n'
-    halt
+stl.output_char 'a'
+stl.output_char 'b'
+stl.output_char 'c'
+stl.output_char 'd'
+stl.output_char 'e'
+stl.output_char 'f'
+stl.output_char 'g'
+stl.output_char 'h'
+stl.output_char 'i'
+stl.output_char 'j'
+stl.output_char 'k'
+stl.output_char 'l'
+stl.output_char 'm'
+stl.output_char 'n'
+stl.output_char 'o'
+stl.output_char 'p'
+stl.output_char 'q'
+stl.output_char 'r'
+stl.output_char 's'
+stl.output_char 't'
+stl.output_char 'u'
+stl.output_char 'v'
+stl.output_char 'w'
+stl.output_char 'x'
+stl.output_char 'y'
+stl.output_char 'z'
+stl.output_char 10
+stl.loop
 `,
-    }],
+      },
+    ],
   },
   {
     name: 'Multi-file',
@@ -110,28 +112,24 @@ main:
     files: [
       {
         name: 'greet.fj',
-        content: `; Greeting macro library
+        content: `// Greeting macro library.
 
-ns greet
-
-def say_hi:
-    output 'H'
-    output 'i'
-    output '!'
-    output '\\n'
-
-ns
+ns greet {
+    def say_hi {
+        stl.output "Hello from greet"
+        stl.output_char 10
+    }
+}
 `,
       },
       {
         name: 'main.fj',
-        content: `; Multi-file example — compiled together with greet.fj
+        content: `// Multi-file example — compiled together with greet.fj.
 
-.startup main
+stl.startup
 
-main:
-    greet.say_hi
-    halt
+greet.say_hi
+stl.loop
 `,
       },
     ],
@@ -139,32 +137,33 @@ main:
   {
     name: 'Hex Digits',
     description: 'Print the hexadecimal digits 0–9 A–F.',
-    files: [{
-      name: 'hexdigits.fj',
-      content: `; Print hex digits: 0-9 A-F
+    files: [
+      {
+        name: 'hexdigits.fj',
+        content: `// Print hex digits: 0-9 A-F.
 
-.startup main
+stl.startup
 
-main:
-    output '0'
-    output '1'
-    output '2'
-    output '3'
-    output '4'
-    output '5'
-    output '6'
-    output '7'
-    output '8'
-    output '9'
-    output 'A'
-    output 'B'
-    output 'C'
-    output 'D'
-    output 'E'
-    output 'F'
-    output '\\n'
-    halt
+stl.output_char '0'
+stl.output_char '1'
+stl.output_char '2'
+stl.output_char '3'
+stl.output_char '4'
+stl.output_char '5'
+stl.output_char '6'
+stl.output_char '7'
+stl.output_char '8'
+stl.output_char '9'
+stl.output_char 'A'
+stl.output_char 'B'
+stl.output_char 'C'
+stl.output_char 'D'
+stl.output_char 'E'
+stl.output_char 'F'
+stl.output_char 10
+stl.loop
 `,
-    }],
+      },
+    ],
   },
 ];
