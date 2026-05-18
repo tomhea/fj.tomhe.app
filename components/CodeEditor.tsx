@@ -56,7 +56,9 @@ export default function CodeEditor({ file, onChange, markers, readOnly, override
         startLineNumber: m.startLine,
         startColumn: m.startCol,
         endLineNumber: m.endLine ?? m.startLine,
-        endColumn: m.endCol ?? 999,
+        // Monaco clamps to actual line length, so passing a very large
+        // sentinel means "extend the squiggle to end of line".
+        endColumn: m.endCol ?? Number.MAX_SAFE_INTEGER,
         message: m.message,
         source: 'fj-compiler',
       }));

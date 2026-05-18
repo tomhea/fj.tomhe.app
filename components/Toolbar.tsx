@@ -68,10 +68,22 @@ export default function Toolbar({
   async function handleFjmUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const buf = await file.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-    onImportFjm(base64);
-    e.target.value = '';
+    try {
+      const buf = await file.arrayBuffer();
+      // `btoa(String.fromCharCode(...uint8))` blows the call stack on
+      // multi-MB FJMs. Chunked binary-string build keeps memory bounded.
+      const bytes = new Uint8Array(buf);
+      const CHUNK = 0x8000;
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      }
+      onImportFjm(btoa(bin));
+    } catch (err) {
+      console.error('FJM upload failed:', err);
+    } finally {
+      e.target.value = '';
+    }
   }
 
   function handleCopyLink() {

@@ -3,6 +3,12 @@ name: Deploy to fj.tomhe.app
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+# Don't allow overlapping deploys.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -10,17 +16,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install + build
+        run: |
+          npm ci
+          npm run build
+
       - name: Set up SSH key
+        env:
+          SSH_KEY:  ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          # printf with single-quoted SSH_KEY avoids any chance of shell
+          # parsing the secret value.
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy via rsync
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          # Preserve server-side state that should survive deploys:
+          #   .env.local      — secrets and per-host config
+          #   node_modules/   — installed server-side (npm ci on the host)
+          #   .next/cache     — next.js build cache
+          # We rsync the working tree (source + built .next/) and let the
+          # server run `npm ci --omit=dev && systemctl restart fj` post-rsync.
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='.github' \
-            -e "ssh -i ~/.ssh/deploy_key" \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/fj/
+            --exclude='node_modules' \
+            --exclude='.env.local' \
+            --exclude='.next/cache' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "$SSH_USER@$SSH_HOST:/var/www/fj/"
+
+      - name: Reinstall + restart service on host
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
+            'cd /var/www/fj && npm ci --omit=dev && sudo systemctl restart fj'

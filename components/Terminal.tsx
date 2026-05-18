@@ -205,7 +205,17 @@ function OutputLine({ line }: { line: TerminalLine }) {
   return (
     <>
       {segments.map((seg, i) => (
-        <div key={i} style={{ color, whiteSpace: 'pre', minHeight: seg ? undefined : '0.5em' }}>
+        <div
+          key={i}
+          style={{
+            color,
+            // pre-wrap so long single-line output wraps inside the terminal
+            // panel instead of forcing a horizontal scrollbar past the viewport
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            minHeight: seg ? undefined : '0.5em',
+          }}
+        >
           {seg}
         </div>
       ))}

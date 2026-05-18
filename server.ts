@@ -1,4 +1,4 @@
-import { createServer } from 'http';
+import { createServer, IncomingMessage } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
@@ -6,18 +6,36 @@ import { spawn, ChildProcess } from 'child_process';
 import { writeFile, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { StringDecoder } from 'string_decoder';
 import { v4 as uuidv4 } from 'uuid';
+import { isSafeFilename } from './lib/safe-filename';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME ?? 'localhost';
 const port = parseInt(process.env.PORT ?? '3000', 10);
 
-// Override these via environment variables to point to your installed tools.
 const FJ_CMD = process.env.FJ_CMD ?? 'fj';
 
 const MAX_FILES = 20;
-const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB per file
-const RUN_TIMEOUT_MS = 5 * 60 * 1000;   // 5 minutes
+const MAX_FILE_BYTES = 256 * 1024;
+const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+const MAX_STDIN_BYTES = 1 * 1024 * 1024;
+const RUN_TIMEOUT_MS = 5 * 60 * 1000;
+const KILL_GRACE_MS = 2_000;
+const WS_MAX_PAYLOAD = 4 * 1024 * 1024;
+
+// Comma-separated list, or default to local dev origins + the deploy host.
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .concat([
+      `http://${hostname}:${port}`,
+      'http://localhost:3000',
+      'https://fj.tomhe.app',
+    ]),
+);
 
 interface RunFjMsg {
   type: 'run_fj';
@@ -45,15 +63,11 @@ type ServerMsg =
   | { type: 'exit'; code: number | null; signal?: string | null }
   | { type: 'error'; data: string };
 
-// Validate that a filename is safe (no path traversal, only .fj extension)
-function isSafeFilename(name: string): boolean {
-  return /^[\w][\w. -]*\.fj$/i.test(name) && !name.includes('..');
-}
-
 async function handleRunConnection(ws: WebSocket): Promise<void> {
   let proc: ChildProcess | null = null;
   let tempDir: string | null = null;
-  let timeout: NodeJS.Timeout | null = null;
+  let runTimeout: NodeJS.Timeout | null = null;
+  let killTimeout: NodeJS.Timeout | null = null;
 
   function send(msg: ServerMsg): void {
     if (ws.readyState === WebSocket.OPEN) {
@@ -62,8 +76,25 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
   }
 
   function cleanup(): void {
-    if (timeout) { clearTimeout(timeout); timeout = null; }
-    if (proc && !proc.killed) { proc.kill('SIGTERM'); proc = null; }
+    if (runTimeout) {
+      clearTimeout(runTimeout);
+      runTimeout = null;
+    }
+    if (killTimeout) {
+      clearTimeout(killTimeout);
+      killTimeout = null;
+    }
+    if (proc && !proc.killed) {
+      const p = proc;
+      proc = null;
+      p.kill('SIGTERM');
+      // Force kill if the process ignores SIGTERM. unref() so a stuck
+      // child doesn't keep the event loop alive at shutdown.
+      killTimeout = setTimeout(() => {
+        if (!p.killed) p.kill('SIGKILL');
+      }, KILL_GRACE_MS);
+      killTimeout.unref?.();
+    }
     if (tempDir) {
       rm(tempDir, { recursive: true, force: true }).catch(() => {});
       tempDir = null;
@@ -77,13 +108,31 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
       child.stdin.write(initialStdin);
     }
 
-    child.stdout?.on('data', (chunk: Buffer) => send({ type: 'stdout', data: chunk.toString() }));
-    child.stderr?.on('data', (chunk: Buffer) => send({ type: 'stderr', data: chunk.toString() }));
+    // UTF-8 decoders so multi-byte chars split across chunks don't corrupt
+    // into U+FFFD replacement characters.
+    const outDec = new StringDecoder('utf8');
+    const errDec = new StringDecoder('utf8');
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      const text = outDec.write(chunk);
+      if (text) send({ type: 'stdout', data: text });
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      const text = errDec.write(chunk);
+      if (text) send({ type: 'stderr', data: text });
+    });
 
     child.on('close', (code, signal) => {
+      const tailOut = outDec.end();
+      if (tailOut) send({ type: 'stdout', data: tailOut });
+      const tailErr = errDec.end();
+      if (tailErr) send({ type: 'stderr', data: tailErr });
       send({ type: 'exit', code, signal });
       proc = null;
-      if (timeout) { clearTimeout(timeout); timeout = null; }
+      if (runTimeout) {
+        clearTimeout(runTimeout);
+        runTimeout = null;
+      }
     });
 
     child.on('error', (err) => {
@@ -91,7 +140,7 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
       proc = null;
     });
 
-    timeout = setTimeout(() => {
+    runTimeout = setTimeout(() => {
       send({ type: 'error', data: 'Process timed out after 5 minutes.' });
       cleanup();
     }, RUN_TIMEOUT_MS);
@@ -107,10 +156,21 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
     }
 
     if (msg.type === 'run_fj') {
-      if (proc) { send({ type: 'error', data: 'A process is already running.' }); return; }
-      if (!msg.files?.length) { send({ type: 'error', data: 'No files provided.' }); return; }
+      if (proc) {
+        send({ type: 'error', data: 'A process is already running.' });
+        return;
+      }
+      if (!msg.files?.length) {
+        send({ type: 'error', data: 'No files provided.' });
+        return;
+      }
       if (msg.files.length > MAX_FILES) {
-        send({ type: 'error', data: `Too many files (max ${MAX_FILES}).` }); return;
+        send({ type: 'error', data: `Too many files (max ${MAX_FILES}).` });
+        return;
+      }
+      if (msg.initialStdin && Buffer.byteLength(msg.initialStdin) > MAX_STDIN_BYTES) {
+        send({ type: 'error', data: 'Stdin too large.' });
+        return;
       }
 
       try {
@@ -118,48 +178,73 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
         await mkdir(tempDir, { recursive: true });
 
         const paths: string[] = [];
+        let total = 0;
         for (const file of msg.files) {
           if (!isSafeFilename(file.name)) {
-            send({ type: 'error', data: `Unsafe filename: ${file.name}` }); return;
+            send({ type: 'error', data: `Unsafe filename: ${file.name}` });
+            return;
           }
-          if (Buffer.byteLength(file.content) > MAX_FILE_BYTES) {
-            send({ type: 'error', data: `File too large: ${file.name}` }); return;
+          const size = Buffer.byteLength(file.content);
+          if (size > MAX_FILE_BYTES) {
+            send({ type: 'error', data: `File too large: ${file.name}` });
+            return;
+          }
+          total += size;
+          if (total > MAX_TOTAL_BYTES) {
+            send({ type: 'error', data: 'Combined file size exceeds limit.' });
+            return;
           }
           const p = join(tempDir, file.name);
           await writeFile(p, file.content, 'utf8');
           paths.push(p);
         }
 
+        // Real fj CLI: `fj <files…>` assembles AND runs in one step (default).
         attachProc(
-          spawn(FJ_CMD, ['asm_run', ...paths], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
+          spawn(FJ_CMD, paths, { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
           msg.initialStdin,
         );
       } catch (err) {
         send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
       }
-
     } else if (msg.type === 'run_fjm') {
-      if (proc) { send({ type: 'error', data: 'A process is already running.' }); return; }
-      if (!msg.fjmBase64) { send({ type: 'error', data: 'No FJM content.' }); return; }
+      if (proc) {
+        send({ type: 'error', data: 'A process is already running.' });
+        return;
+      }
+      if (!msg.fjmBase64) {
+        send({ type: 'error', data: 'No FJM content.' });
+        return;
+      }
+      if (msg.initialStdin && Buffer.byteLength(msg.initialStdin) > MAX_STDIN_BYTES) {
+        send({ type: 'error', data: 'Stdin too large.' });
+        return;
+      }
 
       try {
         tempDir = join(tmpdir(), `fj-run-${uuidv4()}`);
         await mkdir(tempDir, { recursive: true });
         const fjmPath = join(tempDir, 'program.fjm');
         await writeFile(fjmPath, Buffer.from(msg.fjmBase64, 'base64'));
+        // Real fj CLI: `fj --run <prog.fjm>`.
         attachProc(
-          spawn(FJ_CMD, ['run', fjmPath], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
+          spawn(FJ_CMD, ['--run', fjmPath], {
+            cwd: tempDir,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          }),
           msg.initialStdin,
         );
       } catch (err) {
         send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
       }
-
     } else if (msg.type === 'stdin') {
-      if (proc?.stdin?.writable) {
-        proc.stdin.write((msg as StdinMsg).stdin);
+      if (Buffer.byteLength(msg.stdin) > MAX_STDIN_BYTES) {
+        send({ type: 'error', data: 'Stdin chunk too large.' });
+        return;
       }
-
+      if (proc?.stdin?.writable) {
+        proc.stdin.write(msg.stdin);
+      }
     } else if (msg.type === 'kill') {
       cleanup();
       send({ type: 'exit', code: null, signal: 'SIGKILL' });
@@ -170,6 +255,16 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
   ws.on('error', cleanup);
 }
 
+function isAllowedOrigin(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) {
+    // No Origin header → non-browser client or same-origin curl. Allow in
+    // dev (postman/wscat workflows), block in prod.
+    return dev;
+  }
+  return ALLOWED_ORIGINS.has(origin);
+}
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
@@ -178,8 +273,34 @@ app.prepare().then(() => {
     handle(req, res, parse(req.url!, true));
   });
 
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws/run' });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: WS_MAX_PAYLOAD,
+  });
   wss.on('connection', handleRunConnection);
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    const url = parse(req.url ?? '', true);
+    if (url.pathname !== '/ws/run') {
+      socket.destroy();
+      return;
+    }
+    if (!isAllowedOrigin(req)) {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  });
+
+  // Graceful shutdown so orphan fj processes get a chance to clean up.
+  function shutdown(): void {
+    httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 5_000).unref();
+  }
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   httpServer.listen(port, hostname, () => {
     console.log(`> FlipJump Interpreter ready at http://${hostname}:${port}`);

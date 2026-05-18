@@ -19,8 +19,13 @@ const INDEX_PATH = join(ROOT, 'public', 'stl-index.json');
 
 const REPO = 'tomhea/flip-jump';
 const STL_PATH = 'flipjump/stl';
-const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/master/${STL_PATH}`;
-const API_BASE = `https://api.github.com/repos/${REPO}/contents/${STL_PATH}`;
+// Pin to a specific upstream ref so STL is reproducible between builds.
+// Bump this when intentionally adopting upstream changes. The committed
+// public/stl/** copy is the source of truth; this script only refreshes
+// it when `public/stl-index.json` is missing.
+const REF = process.env.FJ_STL_REF ?? 'master';
+const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/${REF}/${STL_PATH}`;
+const API_BASE = `https://api.github.com/repos/${REPO}/contents/${STL_PATH}?ref=${encodeURIComponent(REF)}`;
 
 const HEADERS = {
   'User-Agent': 'fj-ide-stl-fetch/1.0',
