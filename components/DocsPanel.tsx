@@ -118,20 +118,19 @@ function FJReference() {
       </Section>
 
       <Section title="Macro Definition">
-        <Pre>{`def macroName(arg1, arg2):
+        <Pre>{`def macroName arg1, arg2 {
     // body using arg1, arg2
-    output arg1
-    halt`}</Pre>
+    stl.output_char arg1
+}`}</Pre>
         <p>Macros expand at compile time. Arguments are word-value expressions.</p>
       </Section>
 
       <Section title="Namespaces">
-        <Pre>{`ns mylib
-
-def helper:
-    ...
-
-ns           // closes mylib
+        <Pre>{`ns mylib {
+    def helper {
+        // ...
+    }
+}
 
 // Usage:
 mylib.helper`}</Pre>
@@ -166,23 +165,25 @@ mylib.helper`}</Pre>
       </Section>
 
       <Section title="Typical Program Structure">
-        <Pre>{`.startup main
+        <Pre>{`stl.startup
 
-main:
-    output 'H'
-    output 'i'
-    output '\\n'
-    halt`}</Pre>
+stl.output_char 'H'
+stl.output_char 'i'
+stl.output_char 10        // newline
+stl.loop                  // halt`}</Pre>
       </Section>
 
       <Section title="Common STL Macros">
         <table className="text-xs w-full mt-1" style={{ borderCollapse: 'collapse' }}>
           <tbody>
             {[
-              ['output <char>', 'Output a character literal or variable'],
-              ['input <dst>', 'Read one byte from stdin into variable'],
-              ['halt', 'Terminate the program'],
-              ['nop', 'No operation (skip)'],
+              ['stl.startup', 'Boot the program — must be the first executable code'],
+              ['stl.output_char <byte>', 'Output one byte (e.g. an ASCII literal or 0x0a for newline)'],
+              ['stl.output "str"', 'Output a constant string of bytes (no escape sequences)'],
+              ['stl.loop', 'Halt by looping in place'],
+              ['stl.skip', 'No-op (skip the next flip-jump instruction)'],
+              ['bit.input dst', 'Read one byte from stdin into a bit-vector variable'],
+              ['hex.input dst', 'Read one byte from stdin into a hex variable'],
             ].map(([m, desc]) => (
               <tr key={m as string} style={{ borderBottom: '1px solid #333' }}>
                 <td className="pr-4 py-1"><Code>{m as string}</Code></td>
@@ -191,6 +192,9 @@ main:
             ))}
           </tbody>
         </table>
+        <p className="mt-2" style={{ color: '#888', fontSize: 12 }}>
+          Browse the full STL in the <b>Standard Library</b> tab.
+        </p>
       </Section>
 
       <Section title="External Links">
