@@ -22,10 +22,12 @@ const RUN_TIMEOUT_MS = 5 * 60 * 1000;   // 5 minutes
 interface RunFjMsg {
   type: 'run_fj';
   files: Array<{ name: string; content: string }>;
+  initialStdin?: string;
 }
 interface RunFjmMsg {
   type: 'run_fjm';
   fjmBase64: string;
+  initialStdin?: string;
 }
 interface StdinMsg {
   type: 'stdin';
@@ -68,9 +70,12 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
     }
   }
 
-  function attachProc(child: ChildProcess): void {
+  function attachProc(child: ChildProcess, initialStdin?: string): void {
     proc = child;
     send({ type: 'started' });
+    if (initialStdin && child.stdin?.writable) {
+      child.stdin.write(initialStdin);
+    }
 
     child.stdout?.on('data', (chunk: Buffer) => send({ type: 'stdout', data: chunk.toString() }));
     child.stderr?.on('data', (chunk: Buffer) => send({ type: 'stderr', data: chunk.toString() }));
@@ -125,7 +130,10 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
           paths.push(p);
         }
 
-        attachProc(spawn(FJ_CMD, ['asm_run', ...paths], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }));
+        attachProc(
+          spawn(FJ_CMD, ['asm_run', ...paths], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
+          msg.initialStdin,
+        );
       } catch (err) {
         send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
       }
@@ -139,7 +147,10 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
         await mkdir(tempDir, { recursive: true });
         const fjmPath = join(tempDir, 'program.fjm');
         await writeFile(fjmPath, Buffer.from(msg.fjmBase64, 'base64'));
-        attachProc(spawn(FJ_CMD, ['run', fjmPath], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }));
+        attachProc(
+          spawn(FJ_CMD, ['run', fjmPath], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
+          msg.initialStdin,
+        );
       } catch (err) {
         send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
       }

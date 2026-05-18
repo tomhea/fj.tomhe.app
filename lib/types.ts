@@ -4,6 +4,21 @@ export interface FJFile {
   content: string;
 }
 
+export interface SourceFile {
+  name: string;
+  type: 'bf' | 'c';
+  content: string;
+}
+
+export interface MonacoMarker {
+  filename: string;
+  startLine: number;
+  startCol: number;
+  endLine?: number;
+  endCol?: number;
+  message: string;
+}
+
 export interface TerminalLine {
   type: 'stdout' | 'stderr' | 'info' | 'error';
   text: string;
