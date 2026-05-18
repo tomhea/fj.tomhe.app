@@ -1,0 +1,64 @@
+export interface FJFile {
+  id: string;
+  name: string;
+  content: string;
+}
+
+export interface TerminalLine {
+  type: 'stdout' | 'stderr' | 'info' | 'error';
+  text: string;
+  id: number;
+}
+
+export type CompileStatus = 'idle' | 'compiling' | 'success' | 'error';
+export type RunStatus = 'idle' | 'running' | 'exited' | 'error';
+
+// WebSocket message types (client → server)
+export interface WsRunFj {
+  type: 'run_fj';
+  files: Array<{ name: string; content: string }>;
+}
+
+export interface WsRunFjm {
+  type: 'run_fjm';
+  fjmBase64: string;
+}
+
+export interface WsStdin {
+  type: 'stdin';
+  stdin: string;
+}
+
+export interface WsKill {
+  type: 'kill';
+}
+
+export type ClientMessage = WsRunFj | WsRunFjm | WsStdin | WsKill;
+
+// WebSocket message types (server → client)
+export interface WsStdout {
+  type: 'stdout';
+  data: string;
+}
+
+export interface WsStderr {
+  type: 'stderr';
+  data: string;
+}
+
+export interface WsStarted {
+  type: 'started';
+}
+
+export interface WsExit {
+  type: 'exit';
+  code: number | null;
+  signal?: string | null;
+}
+
+export interface WsError {
+  type: 'error';
+  data: string;
+}
+
+export type ServerMessage = WsStdout | WsStderr | WsStarted | WsExit | WsError;
