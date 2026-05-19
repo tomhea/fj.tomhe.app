@@ -129,6 +129,11 @@ export default function IDE() {
   );
   const wsRef = useRef<WebSocket | null>(null);
   const runStartRef = useRef<number>(0);
+  // Line buffers: fj stdout/stderr arrives in arbitrary byte chunks from the
+  // OS pipe. We accumulate until a newline so the terminal never shows a
+  // word split across two separate lines.
+  const stdoutBuf = useRef('');
+  const stderrBuf = useRef('');
   const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const compileAbortRef = useRef<AbortController | null>(null);
   const importAbortRef = useRef<AbortController | null>(null);
@@ -506,19 +511,51 @@ export default function IDE() {
         }
       };
 
+      // Append a chunk to the given line buffer, flushing every complete line
+      // (terminated by \n) immediately. Partial last lines stay buffered until
+      // the next chunk (or process exit) completes them.
+      function feedBuffer(
+        buf: React.MutableRefObject<string>,
+        type: TerminalLine['type'],
+        chunk: string,
+      ) {
+        // Normalise \r\n → \n and bare \r → \n so fj's progress output
+        // doesn't bleed raw \r characters into the terminal display.
+        const normalised = chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        buf.current += normalised;
+        const parts = buf.current.split('\n');
+        // Every element except the last is a complete line.
+        for (let i = 0; i < parts.length - 1; i++) {
+          addLine(type, parts[i]);
+        }
+        buf.current = parts[parts.length - 1];
+      }
+
+      function flushBuffer(buf: React.MutableRefObject<string>, type: TerminalLine['type']) {
+        if (buf.current) {
+          addLine(type, buf.current);
+          buf.current = '';
+        }
+      }
+
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data) as ServerMessage;
         switch (msg.type) {
           case 'started':
             runStartRef.current = Date.now();
+            stdoutBuf.current = '';
+            stderrBuf.current = '';
             break;
           case 'stdout':
-            addLine('stdout', msg.data);
+            feedBuffer(stdoutBuf, 'stdout', msg.data);
             break;
           case 'stderr':
-            addLine('stderr', msg.data);
+            feedBuffer(stderrBuf, 'stderr', msg.data);
             break;
           case 'exit': {
+            // Flush any unterminated last line (program that doesn't end with \n)
+            flushBuffer(stdoutBuf, 'stdout');
+            flushBuffer(stderrBuf, 'stderr');
             const elapsed = ((Date.now() - runStartRef.current) / 1000).toFixed(2);
             addLine(
               'info',
