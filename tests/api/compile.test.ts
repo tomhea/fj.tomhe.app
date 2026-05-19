@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
+import { execSync } from 'child_process';
 import { POST } from '@/app/api/compile/route';
+
+// fj is shipped with `pip install flipjump`. Locally + CI install it.
+const fjAvailable = (() => {
+  try {
+    execSync(`${process.env.FJ_CMD ?? 'fj'} --help`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 /**
  * Integration tests for /api/compile. Runs the real `fj --asm` if it's on
@@ -91,10 +102,8 @@ describe('POST /api/compile', () => {
     });
   });
 
-  describe('with real fj toolchain', () => {
-    const fjAvailable = !process.env.SKIP_FJ_TESTS;
-
-    it.skipIf(!fjAvailable)('compiles a simple Hello-World program', async () => {
+  describe.skipIf(!fjAvailable)('with real fj toolchain', () => {
+    it('compiles a simple Hello-World program', async () => {
       const { json } = await call({
         files: [{ name: 'main.fj', content: HELLO_FJ }],
       });
@@ -111,7 +120,7 @@ describe('POST /api/compile', () => {
       expect(fjm.byteLength).toBeGreaterThan(16); // FJM file header is 16 bytes
     });
 
-    it.skipIf(!fjAvailable)(
+    it(
       'returns success=false with stderr for syntactically invalid source',
       async () => {
         const { json } = await call({
@@ -124,7 +133,7 @@ describe('POST /api/compile', () => {
       },
     );
 
-    it.skipIf(!fjAvailable)(
+    it(
       'compiles a multi-file project',
       async () => {
         const lib = [

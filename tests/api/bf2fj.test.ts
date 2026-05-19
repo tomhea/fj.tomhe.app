@@ -1,6 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
+import { execSync } from 'child_process';
 import { POST } from '@/app/api/bf2fj/route';
+
+// bf2fj is shipped with some versions of `flipjump` (pip) but not all.
+// Tests that exercise the real tool are gated on its presence; validation
+// paths run unconditionally because they never spawn the subprocess.
+const bf2fjAvailable = (() => {
+  try {
+    execSync(`${process.env.BF2FJ_CMD ?? 'bf2fj'} --help`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 function makeReq(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/bf2fj', {
@@ -30,10 +43,8 @@ describe('POST /api/bf2fj', () => {
     });
   });
 
-  describe('with real bf2fj toolchain', () => {
-    const available = !process.env.SKIP_FJ_TESTS;
-
-    it.skipIf(!available)(
+  describe.skipIf(!bf2fjAvailable)('with real bf2fj toolchain', () => {
+    it(
       'converts a trivial BF program to FJ',
       async () => {
         // `+++.` increments cell 0 three times then prints it (a single byte
@@ -51,7 +62,7 @@ describe('POST /api/bf2fj', () => {
       },
     );
 
-    it.skipIf(!available)(
+    it(
       'rejects invalid Brainfuck cleanly (no crash, stderr surfaced)',
       async () => {
         // Unbalanced bracket. bf2fj should fail; we just check we don't
