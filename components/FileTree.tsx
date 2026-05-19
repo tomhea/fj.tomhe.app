@@ -8,6 +8,8 @@ interface FileTreeProps {
   activeFileId: string;
   sources: SourceFile[];
   activeSourceIdx: number | null;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onSelectFile: (id: string) => void;
   onSelectSource: (idx: number) => void;
   onCreateFile: (name: string) => void;
@@ -18,6 +20,7 @@ interface FileTreeProps {
 export default function FileTree({
   files, activeFileId,
   sources, activeSourceIdx,
+  collapsed, onToggleCollapsed,
   onSelectFile, onSelectSource,
   onCreateFile, onRenameFile, onDeleteFile,
 }: FileTreeProps) {
@@ -91,6 +94,24 @@ export default function FileTree({
     setContextMenu({ id, x: e.clientX, y: e.clientY });
   }
 
+  if (collapsed) {
+    return (
+      <div
+        className="flex flex-col shrink-0 items-center"
+        style={{ width: 32, background: '#252526', borderRight: '1px solid #3c3c3c' }}
+      >
+        <button
+          onClick={onToggleCollapsed}
+          title="Show Explorer"
+          className="p-1.5 mt-1 rounded hover:bg-zinc-600 transition-colors"
+          aria-label="Show file tree"
+        >
+          <CollapseIcon collapsed />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex flex-col shrink-0 overflow-hidden"
@@ -102,14 +123,25 @@ export default function FileTree({
         style={{ color: '#bbbbbb', borderBottom: '1px solid #3c3c3c', minHeight: 32 }}
       >
         <span>Explorer</span>
-        <button
-          onClick={startNew}
-          title="New file"
-          className="rounded p-0.5 hover:bg-zinc-600 transition-colors"
-          style={{ lineHeight: 1 }}
-        >
-          <PlusIcon />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={startNew}
+            title="New file"
+            className="rounded p-0.5 hover:bg-zinc-600 transition-colors"
+            style={{ lineHeight: 1 }}
+          >
+            <PlusIcon />
+          </button>
+          <button
+            onClick={onToggleCollapsed}
+            title="Hide Explorer"
+            className="rounded p-0.5 hover:bg-zinc-600 transition-colors"
+            style={{ lineHeight: 1 }}
+            aria-label="Hide file tree"
+          >
+            <CollapseIcon />
+          </button>
+        </div>
       </div>
 
       {/* FJ File list */}
@@ -258,6 +290,16 @@ function CtxMenuItem({ label, onClick, danger }: { label: string; onClick: () =>
     >
       {label}
     </button>
+  );
+}
+
+function CollapseIcon({ collapsed = false }: { collapsed?: boolean }) {
+  // Chevron pointing right when collapsed (click to expand), left when open.
+  const d = collapsed ? "M6 4l4 4-4 4" : "M10 4l-4 4 4 4";
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#cccccc" strokeWidth="1.5">
+      <path d={d} />
+    </svg>
   );
 }
 

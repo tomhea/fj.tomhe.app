@@ -53,6 +53,11 @@ function makeDefaultFile(): FJFile {
 }
 
 let lineCounter = 0;
+// Soft cap on terminal lines — long-running fj programs can emit MBs of
+// output; rendering each line as a DOM div hangs the page well before
+// the WS or fj actually stops. 5000 keeps things smooth and is enough
+// to surface stderr + the last few seconds of stdout.
+const MAX_TERMINAL_LINES = 5000;
 function nextLineId() {
   return ++lineCounter;
 }
@@ -119,6 +124,9 @@ export default function IDE() {
   const [stdinContent, setStdinContent] = useState('');
   const [markers, setMarkers] = useState<MonacoMarker[]>([]);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => loadFromLocalStorage<boolean>('fj-ide-sidebar-collapsed') ?? false,
+  );
   const wsRef = useRef<WebSocket | null>(null);
   const runStartRef = useRef<number>(0);
   const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,6 +140,9 @@ export default function IDE() {
   useEffect(() => {
     saveToLocalStorage('fj-ide-sources', sources);
   }, [sources]);
+  useEffect(() => {
+    saveToLocalStorage('fj-ide-sidebar-collapsed', sidebarCollapsed);
+  }, [sidebarCollapsed]);
 
   // Update the share fragment (debounced 1s). Written to hash, not query
   // string, so the encoded program doesn't leak into Referer / server logs.
@@ -151,8 +162,21 @@ export default function IDE() {
     };
   }, [files]);
 
+  // Cap the terminal at MAX_TERMINAL_LINES — keeps a program that prints
+  // millions of lines from hanging the browser by exploding the DOM. The
+  // banner only shows once when we first truncate.
   const addLine = useCallback((type: TerminalLine['type'], text: string) => {
-    setTerminalLines((prev) => [...prev, { type, text, id: nextLineId() }]);
+    setTerminalLines((prev) => {
+      const next = [...prev, { type, text, id: nextLineId() }];
+      if (next.length > MAX_TERMINAL_LINES) {
+        const dropped = next.length - MAX_TERMINAL_LINES;
+        return [
+          { type: 'info' as const, text: `… ${dropped} earlier line${dropped === 1 ? "" : "s"} truncated`, id: nextLineId() },
+          ...next.slice(-MAX_TERMINAL_LINES + 1),
+        ];
+      }
+      return next;
+    });
   }, []);
 
   const clearTerminal = useCallback(() => setTerminalLines([]), []);
@@ -539,20 +563,14 @@ export default function IDE() {
     [addLine],
   );
 
-  // Auto-run Hello World on first visit. Wrapped so a failure (e.g. fj not
-  // installed, WS blocked by proxy) doesn't surface as a cryptic error.
+  // First-visit hint: surface a non-noisy nudge in the terminal instead of
+  // auto-running. The previous auto-run was confusing on networks where
+  // /ws/run is blocked (corp proxies) and surprising in general.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!localStorage.getItem('fj-visited')) {
       localStorage.setItem('fj-visited', '1');
-      const timer = setTimeout(() => {
-        try {
-          runOnline('fj');
-        } catch {
-          /* ignore — user can click Run themselves */
-        }
-      }, 1000);
-      return () => clearTimeout(timer);
+      addLine('info', '👋  Click "Run FJ" in the toolbar to try the sample program.');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -595,6 +613,8 @@ export default function IDE() {
           activeFileId={activeFileId}
           sources={sources}
           activeSourceIdx={activeSourceIdx}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
           onSelectFile={selectFile}
           onSelectSource={selectSource}
           onCreateFile={createFile}

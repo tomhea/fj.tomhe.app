@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import StlViewer from './StlViewer';
 
 interface DocsPanelProps {
@@ -11,15 +11,54 @@ interface DocsPanelProps {
 export default function DocsPanel({ open, onClose }: DocsPanelProps) {
   const [tab, setTab] = useState<'ref' | 'stl'>('ref');
 
-  // Close on Escape when the panel is open. Full focus trapping is left
-  // for a follow-up (would justify pulling in @radix-ui/react-dialog).
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Remember the trigger so we can restore focus when the panel closes —
+  // standard a11y pattern for transient dialogs.
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  // Close on Escape + trap Tab focus inside the panel while open.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+
+    // Move focus into the panel so screen-reader / keyboard users land here.
+    const panel = panelRef.current;
+    const first = panel?.querySelector<HTMLElement>(
+      'button, [href], input, [tabindex]:not([tabindex="-1"])',
+    );
+    first?.focus();
+
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !panel) return;
+      // Trap Tab cycling within the panel.
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.hasAttribute('disabled'));
+      if (focusable.length === 0) return;
+      const firstEl = focusable[0];
+      const lastEl = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && active === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && active === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      // Restore focus to the trigger.
+      previousFocusRef.current?.focus?.();
+    };
   }, [open, onClose]);
 
   return (
@@ -35,6 +74,7 @@ export default function DocsPanel({ open, onClose }: DocsPanelProps) {
 
       {/* Panel */}
       <div
+        ref={panelRef}
         className="fixed top-0 right-0 bottom-0 z-50 flex flex-col"
         role="dialog"
         aria-modal="true"
