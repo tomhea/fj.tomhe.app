@@ -121,7 +121,7 @@ describe('POST /api/c2fj', () => {
   describe('zip safety', () => {
     it('rejects archive with no supported files', async () => {
       const zip = makeZip([{ name: 'readme.txt', data: Buffer.from('hi') }]);
-      const { status, json } = await callWith(new Blob([zip]), 'empty.zip');
+      const { status, json } = await callWith(new Blob([new Uint8Array(zip)]), 'empty.zip');
       expect(status).toBe(400);
       expect(json.error).toMatch(/no supported source/i);
     });
@@ -131,7 +131,7 @@ describe('POST /api/c2fj', () => {
         { name: '../escape.c', data: Buffer.from('int main(){}') },
         { name: 'ok.c', data: Buffer.from('int main(){}') },
       ]);
-      const { json } = await callWith(new Blob([zip]), 'malicious.zip');
+      const { json } = await callWith(new Blob([new Uint8Array(zip)]), 'malicious.zip');
       // ok.c is extracted, ../escape.c is silently dropped → c2fj runs on ok.c.
       expect(json.success).toBe(true);
     });
@@ -141,7 +141,7 @@ describe('POST /api/c2fj', () => {
         { name: 'C:/escape.c', data: Buffer.from('int main(){}') },
         { name: 'ok.c', data: Buffer.from('int main(){}') },
       ]);
-      const { json } = await callWith(new Blob([zip]), 'win.zip');
+      const { json } = await callWith(new Blob([new Uint8Array(zip)]), 'win.zip');
       // Hard requirement: the route must not crash / 500. The "C:/escape.c"
       // entry resolves outside srcDir on Windows and stays inside (as a
       // subdir literal named "C:") on Linux. We don't care which behaviour
@@ -162,7 +162,7 @@ describe('POST /api/c2fj', () => {
         { name: 'link.c', data: Buffer.from('/etc/passwd'), symlink: true },
         { name: 'real.c', data: Buffer.from('int main(){}') },
       ]);
-      const { json } = await callWith(new Blob([zip]), 'sym.zip');
+      const { json } = await callWith(new Blob([new Uint8Array(zip)]), 'sym.zip');
       // Symlink dropped; real.c remains.
       expect(json.success).toBe(true);
     });
@@ -172,7 +172,7 @@ describe('POST /api/c2fj', () => {
         { name: 'too-big.c', data: Buffer.alloc(6 * 1024 * 1024, 0x61) },
         { name: 'ok.c', data: Buffer.from('int main(){}') },
       ]);
-      const { json } = await callWith(new Blob([zip]), 'mixed.zip');
+      const { json } = await callWith(new Blob([new Uint8Array(zip)]), 'mixed.zip');
       // The big entry is dropped; ok.c remains.
       expect(json.success).toBe(true);
     });
@@ -186,7 +186,7 @@ describe('POST /api/c2fj', () => {
         data: big,
       }));
       const zip = makeZip(entries);
-      const { status, json } = await callWith(new Blob([zip]), 'bomb.zip');
+      const { status, json } = await callWith(new Blob([new Uint8Array(zip)]), 'bomb.zip');
       expect(status).toBe(400);
       expect(json.error).toMatch(/uncompressed/i);
     });
@@ -196,7 +196,7 @@ describe('POST /api/c2fj', () => {
         { name: 'evil.exe', data: Buffer.from('MZ\x90\x00') },
         { name: 'real.c', data: Buffer.from('int main(){}') },
       ]);
-      const { json } = await callWith(new Blob([zip]), 'mixed-ext.zip');
+      const { json } = await callWith(new Blob([new Uint8Array(zip)]), 'mixed-ext.zip');
       expect(json.success).toBe(true);
     });
   });
