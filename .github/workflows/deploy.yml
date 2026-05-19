@@ -34,7 +34,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /var/www/fj/
+            source .venv/bin/activate
             rsync -avz --delete --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='.env.local' --exclude='.next/cache' .
             npm config set legacy-peer-deps true
             npm ci --omit=dev
-            sudo systemctl restart caddy
+            sudo systemctl restart fj
