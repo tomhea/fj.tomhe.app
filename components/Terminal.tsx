@@ -96,7 +96,7 @@ export default function Terminal({
             onClick={() => setTab(t)}
             className="px-3 text-xs transition-colors h-full flex items-center"
             style={{
-              color: tab === t ? '#cccccc' : '#666',
+              color: tab === t ? '#cccccc' : '#9e9e9e',
               borderBottom: tab === t ? '1px solid #0078d4' : '1px solid transparent',
               background: 'transparent',
             }}
@@ -176,7 +176,7 @@ export default function Terminal({
 
       {!collapsed && tab === 'stdin' && (
         <div className="flex flex-col flex-1 min-h-0 p-2" style={{ background: '#1e1e1e' }}>
-          <div className="text-xs mb-1" style={{ color: '#666' }}>
+          <div className="text-xs mb-1" style={{ color: '#9e9e9e' }}>
             Pre-filled stdin — piped to process on start (before any interactive input)
           </div>
           <textarea

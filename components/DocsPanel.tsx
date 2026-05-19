@@ -79,7 +79,11 @@ export default function DocsPanel({ open, onClose }: DocsPanelProps) {
         role="dialog"
         aria-modal="true"
         aria-label="Documentation"
-        aria-hidden={!open}
+        // `inert` removes the whole subtree from the focus/AT order when
+        // closed (modern alternative to aria-hidden + tabindex sweep).
+        // React 19 supports `inert` natively; pass `true` (not "") so the
+        // boolean attribute is actually set on the DOM element.
+        inert={open ? undefined : true}
         style={{
           width: 'clamp(400px, 42vw, 700px)',
           background: '#1e1e1e',
@@ -118,7 +122,7 @@ export default function DocsPanel({ open, onClose }: DocsPanelProps) {
               onClick={() => setTab(t)}
               className="px-4 py-2 text-xs transition-colors"
               style={{
-                color: tab === t ? '#cccccc' : '#666',
+                color: tab === t ? '#cccccc' : '#9e9e9e',
                 borderBottom: tab === t ? '2px solid #0078d4' : '2px solid transparent',
                 background: 'transparent',
               }}
@@ -277,7 +281,7 @@ stl.loop                  // halt`}</Pre>
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-6">
-      <h3 className="font-semibold mb-2 text-sm" style={{ color: '#e8c47a' }}>{title}</h3>
+      <h2 className="font-semibold mb-2 text-sm" style={{ color: '#e8c47a' }}>{title}</h2>
       {children}
     </div>
   );

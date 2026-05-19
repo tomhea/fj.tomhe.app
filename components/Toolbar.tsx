@@ -132,7 +132,7 @@ export default function Toolbar({
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                 >
                   <div style={{ fontWeight: 500 }}>{ex.name}</div>
-                  <div style={{ color: '#666', fontSize: 11 }}>{ex.description}</div>
+                  <div style={{ color: '#9e9e9e', fontSize: 11 }}>{ex.description}</div>
                 </button>
               ))}
             </div>
