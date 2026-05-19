@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const p = require\\('./package.json'\\); const d = p.devDependencies; ['@testing-library/react','@testing-library/user-event','@testing-library/jest-dom','jsdom','@axe-core/playwright'].forEach\\(k => console.log\\(k, d[k]\\)\\)\")"
+    ]
+  }
+}
