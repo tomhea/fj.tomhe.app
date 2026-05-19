@@ -33,6 +33,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /var/www/fj/
-            rsync -avz --delete --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='.env.local' --exclude='.next/cache'
+            rsync -avz --delete --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='.env.local' --exclude='.next/cache' .
             npm ci --omit=dev
             sudo systemctl restart fj
