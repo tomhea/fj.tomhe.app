@@ -10,6 +10,9 @@ interface StlEntry {
   path: string;
   name: string;
   dir: string;
+  /** Full file content — included since fetch-stl.mjs v2 for content search.
+   *  Optional so old cached stl-index.json files degrade gracefully. */
+  content?: string;
 }
 
 interface StlIndex {
@@ -74,13 +77,27 @@ export default function StlViewer() {
     );
   }
 
-  // Search filtering — flat list of all matching entries
+  // Search filtering — flat list of all matching entries.
+  // Matches filename/path first, then falls back to file content when the
+  // index includes it (fetch-stl.mjs v2+). Old cached indexes without
+  // `content` gracefully skip content search.
   const query = searchQuery.trim().toLowerCase();
-  const searchResults = query
-    ? index.files.filter(f =>
-        f.name.toLowerCase().includes(query) ||
-        f.path.toLowerCase().includes(query),
-      )
+
+  type SearchResult = { entry: StlEntry; snippet: string | null };
+  const searchResults: SearchResult[] | null = query
+    ? index.files.flatMap((f): SearchResult[] => {
+        const nameMatch =
+          f.name.toLowerCase().includes(query) ||
+          f.path.toLowerCase().includes(query);
+        const contentSnippet =
+          !nameMatch && f.content
+            ? getMatchSnippet(f.content, query)
+            : null;
+        if (nameMatch || contentSnippet !== null) {
+          return [{ entry: f, snippet: contentSnippet }];
+        }
+        return [];
+      })
     : null;
 
   // Group files by directory
@@ -138,8 +155,8 @@ export default function StlViewer() {
           searchResults.length === 0 ? (
             <div className="px-3 py-2 text-xs" style={{ color: '#666' }}>No results</div>
           ) : (
-            searchResults.map(f => (
-              <SearchResultItem key={f.path} entry={f} selected={selected} onSelect={selectFile} />
+            searchResults.map(({ entry, snippet }) => (
+              <SearchResultItem key={entry.path} entry={entry} selected={selected} onSelect={selectFile} snippet={snippet} />
             ))
           )
         ) : (
@@ -213,10 +230,12 @@ export default function StlViewer() {
   );
 }
 
-function SearchResultItem({ entry, selected, onSelect }: {
+function SearchResultItem({ entry, selected, onSelect, snippet }: {
   entry: StlEntry;
   selected: StlEntry | null;
   onSelect: (e: StlEntry) => void;
+  /** A short excerpt of the matching line when the match came from file content. */
+  snippet: string | null;
 }) {
   const isActive = selected?.path === entry.path;
   function activate() { onSelect(entry); }
@@ -236,12 +255,30 @@ function SearchResultItem({ entry, selected, onSelect }: {
     >
       <span className="truncate">{entry.name}</span>
       {entry.dir && (
-        <span className="truncate" style={{ color: isActive ? '#aad3f5' : '#555', fontSize: 10 }}>
+        <span className="truncate" style={{ color: isActive ? '#aad3f5' : '#666', fontSize: 10 }}>
           {entry.dir}
+        </span>
+      )}
+      {snippet && (
+        <span className="truncate font-mono" style={{ color: isActive ? '#aad3f5' : '#888', fontSize: 10 }}>
+          {snippet}
         </span>
       )}
     </div>
   );
+}
+
+/** Returns the first line of `content` that contains `query` (case-insensitive),
+ *  trimmed and capped at 60 chars. Returns null if no match. */
+function getMatchSnippet(content: string, query: string): string | null {
+  const q = query.toLowerCase();
+  for (const line of content.split('\n')) {
+    if (line.toLowerCase().includes(q)) {
+      const trimmed = line.trim();
+      return trimmed.length > 60 ? trimmed.slice(0, 60) + '…' : trimmed;
+    }
+  }
+  return null;
 }
 
 function FileGroup({

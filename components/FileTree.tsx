@@ -15,6 +15,8 @@ interface FileTreeProps {
   onCreateFile: (name: string) => void;
   onRenameFile: (id: string, name: string) => void;
   onDeleteFile: (id: string) => void;
+  /** When true the tree stretches to fill its flex parent (used in the mobile drawer). */
+  fullWidth?: boolean;
 }
 
 export default function FileTree({
@@ -23,6 +25,7 @@ export default function FileTree({
   collapsed, onToggleCollapsed,
   onSelectFile, onSelectSource,
   onCreateFile, onRenameFile, onDeleteFile,
+  fullWidth = false,
 }: FileTreeProps) {
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -114,8 +117,8 @@ export default function FileTree({
 
   return (
     <div
-      className="flex flex-col shrink-0 overflow-hidden"
-      style={{ width: 200, background: '#252526', borderRight: '1px solid #3c3c3c' }}
+      className={`flex flex-col overflow-hidden ${fullWidth ? 'flex-1' : 'shrink-0'}`}
+      style={{ width: fullWidth ? '100%' : 200, background: '#252526', borderRight: '1px solid #3c3c3c' }}
     >
       {/* Header */}
       <div

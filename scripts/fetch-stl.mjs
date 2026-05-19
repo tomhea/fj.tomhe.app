@@ -35,7 +35,7 @@ const HEADERS = {
     : {}),
 };
 
-/** @type {{ path: string; name: string; dir: string }[]} */
+/** @type {{ path: string; name: string; dir: string; content: string }[]} */
 const allFiles = [];
 
 async function fetchJson(url) {
@@ -62,7 +62,7 @@ async function processDir(apiUrl, relDir) {
       const outPath = join(OUT_DIR, relPath);
       await mkdir(dirname(outPath), { recursive: true });
       await writeFile(outPath, content, 'utf8');
-      allFiles.push({ path: relPath, name: entry.name, dir: relDir ?? '' });
+      allFiles.push({ path: relPath, name: entry.name, dir: relDir ?? '', content });
       process.stdout.write('.');
     }
   }

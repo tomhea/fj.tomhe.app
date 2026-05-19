@@ -64,8 +64,7 @@ html, body {
  */
 .ide-root {
   height: 100vh;
-  /* stylelint-disable-next-line unit-no-unknown */
-  height: 100dvh;
+  height: 100dvh; /* browsers that support dvh use it; others keep 100vh */
   padding-bottom: env(safe-area-inset-bottom);
   padding-left:   env(safe-area-inset-left);
   padding-right:  env(safe-area-inset-right);
