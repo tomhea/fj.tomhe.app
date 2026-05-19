@@ -34,9 +34,15 @@ export default function Toolbar({
   const fjInputRef = useRef<HTMLInputElement>(null);
   const fjmInputRef = useRef<HTMLInputElement>(null);
   const examplesBtnRef = useRef<HTMLButtonElement>(null);
+  const shortBtnRef = useRef<HTMLButtonElement>(null);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  type ShortState = 'idle' | 'loading' | 'copied' | 'error' | 'cooldown';
+  const [shortState, setShortState] = useState<ShortState>('idle');
+  const [shortUrl, setShortUrl] = useState('');
+  const [shortTooltipPos, setShortTooltipPos] = useState<{ bottom: number; left: number } | null>(null);
+  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Recompute dropdown position whenever it opens or the window resizes/scrolls.
   useEffect(() => {
@@ -109,6 +115,45 @@ export default function Toolbar({
     onCopyLink();
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
+  }
+
+  async function handleShortLink() {
+    if (shortState === 'loading' || shortState === 'cooldown') return;
+    const longUrl = window.location.href;
+    if (!longUrl.includes('#share=')) {
+      // Nothing shared yet — fall back to generating the share URL first
+      onCopyLink();
+    }
+    const urlToShorten = window.location.href;
+    setShortState('loading');
+
+    // Position the tooltip above the button
+    const rect = shortBtnRef.current?.getBoundingClientRect();
+    if (rect) setShortTooltipPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+
+    try {
+      const res = await fetch('https://spoo.me/', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ url: urlToShorten }),
+      });
+      if (!res.ok) throw new Error(`spoo.me ${res.status}`);
+      const data = await res.json() as { short_url: string };
+      const short = data.short_url;
+      await navigator.clipboard.writeText(short);
+      setShortUrl(short);
+      setShortState('copied');
+
+      // Hide tooltip + enter 30s cooldown
+      setTimeout(() => {
+        setShortState('cooldown');
+        setShortTooltipPos(null);
+        cooldownRef.current = setTimeout(() => setShortState('idle'), 30_000);
+      }, 3000);
+    } catch {
+      setShortState('error');
+      setTimeout(() => setShortState('idle'), 3000);
+    }
   }
 
   return (
@@ -216,6 +261,43 @@ export default function Toolbar({
         <LinkIcon />
         {linkCopied ? 'Copied!' : 'Copy Link'}
       </ToolBtn>
+
+      {/* Short link via spoo.me */}
+      <div className="relative">
+        <ToolBtn
+          ref={shortBtnRef}
+          onClick={handleShortLink}
+          disabled={shortState === 'loading' || shortState === 'cooldown'}
+          title={
+            shortState === 'cooldown' ? 'Please wait before generating another short link' :
+            'Shorten link via spoo.me and copy to clipboard'
+          }
+        >
+          <ScissorsIcon />
+          {shortState === 'loading' ? 'Shortening…' :
+           shortState === 'error'   ? 'Failed' :
+           shortState === 'cooldown' ? 'Short Link' :
+           'Short Link'}
+        </ToolBtn>
+        {/* Tooltip: appears above button when copied, portalled to avoid overflow clipping */}
+        {(shortState === 'copied') && shortTooltipPos && createPortal(
+          <div
+            className="fixed text-xs rounded px-2 py-1 shadow-lg pointer-events-none"
+            style={{
+              bottom: shortTooltipPos.bottom,
+              left: shortTooltipPos.left,
+              background: '#1e1e1e',
+              border: '1px solid #454545',
+              color: '#73c991',
+              whiteSpace: 'nowrap',
+              zIndex: 60,
+            }}
+          >
+            ✓ Copied — {shortUrl}
+          </div>,
+          document.body,
+        )}
+      </div>
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
 
@@ -365,6 +447,16 @@ function LinkIcon() {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#cccccc" strokeWidth="1.5">
       <path d="M7 9a3 3 0 0 0 4.3.3l2-2a3 3 0 0 0-4.2-4.2L7.8 4.4" />
       <path d="M9 7a3 3 0 0 0-4.3-.3l-2 2a3 3 0 0 0 4.2 4.2l1.3-1.3" />
+    </svg>
+  );
+}
+
+function ScissorsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#cccccc" strokeWidth="1.5">
+      <circle cx="4" cy="4" r="2" />
+      <circle cx="4" cy="12" r="2" />
+      <path d="M6 4.5L14 9M6 11.5L14 7" />
     </svg>
   );
 }

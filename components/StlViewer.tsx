@@ -23,11 +23,13 @@ function languageForStl(name: string): string {
 }
 
 export default function StlViewer() {
-  const [index, setIndex] = useState<StlIndex | null>(null);
+  // undefined = still loading, null = failed to load, StlIndex = loaded
+  const [index, setIndex] = useState<StlIndex | null | undefined>(undefined);
   const [selected, setSelected] = useState<StlEntry | null>(null);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetch('/stl-index.json')
@@ -57,13 +59,29 @@ export default function StlViewer() {
     });
   }
 
-  if (!index) {
+  if (index === undefined) {
     return (
       <div className="flex-1 flex items-center justify-center text-sm" style={{ color: '#666' }}>
-        {index === null ? 'STL not available. Run npm run dev to fetch it.' : 'Loading…'}
+        Loading…
       </div>
     );
   }
+  if (index === null) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm" style={{ color: '#666' }}>
+        STL not available. Run npm run dev to fetch it.
+      </div>
+    );
+  }
+
+  // Search filtering — flat list of all matching entries
+  const query = searchQuery.trim().toLowerCase();
+  const searchResults = query
+    ? index.files.filter(f =>
+        f.name.toLowerCase().includes(query) ||
+        f.path.toLowerCase().includes(query),
+      )
+    : null;
 
   // Group files by directory
   const rootFiles = index.files.filter(f => f.dir === '');
@@ -85,22 +103,62 @@ export default function StlViewer() {
         className="flex flex-col overflow-y-auto shrink-0"
         style={{ width: 180, borderRight: '1px solid #3c3c3c', background: '#252526' }}
       >
-        <FileGroup
-          entries={rootFiles}
-          selected={selected}
-          onSelect={selectFile}
-        />
-        {topDirs.map(dir => (
-          <DirGroup
-            key={dir}
-            dir={dir}
-            allEntries={index.files}
-            selected={selected}
-            collapsed={collapsed}
-            onToggle={toggleDir}
-            onSelect={selectFile}
-          />
-        ))}
+        {/* Search input */}
+        <div className="px-2 py-1.5 shrink-0" style={{ borderBottom: '1px solid #3c3c3c' }}>
+          <div className="flex items-center gap-1 rounded px-2 py-0.5"
+            style={{ background: '#3c3c3c', border: '1px solid #555' }}
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#888" strokeWidth="1.5" style={{ flexShrink: 0 }}>
+              <circle cx="6" cy="6" r="4" />
+              <path d="M10 10l3 3" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search STL…"
+              aria-label="Search standard library"
+              className="flex-1 outline-none bg-transparent text-xs"
+              style={{ color: '#cccccc' }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+                style={{ color: '#888', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+
+        {searchResults !== null ? (
+          /* Flat search results */
+          searchResults.length === 0 ? (
+            <div className="px-3 py-2 text-xs" style={{ color: '#666' }}>No results</div>
+          ) : (
+            searchResults.map(f => (
+              <SearchResultItem key={f.path} entry={f} selected={selected} onSelect={selectFile} />
+            ))
+          )
+        ) : (
+          /* Normal tree view */
+          <>
+            <FileGroup entries={rootFiles} selected={selected} onSelect={selectFile} />
+            {topDirs.map(dir => (
+              <DirGroup
+                key={dir}
+                dir={dir}
+                allEntries={index.files}
+                selected={selected}
+                collapsed={collapsed}
+                onToggle={toggleDir}
+                onSelect={selectFile}
+              />
+            ))}
+          </>
+        )}
       </div>
 
       {/* Editor pane */}
@@ -151,6 +209,37 @@ export default function StlViewer() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SearchResultItem({ entry, selected, onSelect }: {
+  entry: StlEntry;
+  selected: StlEntry | null;
+  onSelect: (e: StlEntry) => void;
+}) {
+  const isActive = selected?.path === entry.path;
+  function activate() { onSelect(entry); }
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={activate}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
+      className="flex flex-col px-2 py-0.5 cursor-pointer text-xs"
+      style={{
+        background: isActive ? '#094771' : 'transparent',
+        color: isActive ? '#fff' : '#cccccc',
+      }}
+      onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = '#2a2d2e'; }}
+      onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+    >
+      <span className="truncate">{entry.name}</span>
+      {entry.dir && (
+        <span className="truncate" style={{ color: isActive ? '#aad3f5' : '#555', fontSize: 10 }}>
+          {entry.dir}
+        </span>
+      )}
     </div>
   );
 }

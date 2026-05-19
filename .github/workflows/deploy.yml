@@ -48,3 +48,14 @@ jobs:
             npm config set legacy-peer-deps true
             npm ci --omit=dev
             sudo systemctl restart fj
+
+      - name: Smoke test (wait for 200 OK)
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://fj.tomhe.app)
+            echo "Attempt $i: HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "Smoke test failed — site did not return 200 after restart"
+          exit 1
