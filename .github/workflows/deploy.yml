@@ -37,4 +37,4 @@ jobs:
             rsync -avz --delete --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='.env.local' --exclude='.next/cache' .
             npm config set legacy-peer-deps true
             npm ci --omit=dev
-            sudo systemctl restart fj
+            sudo systemctl restart caddy
