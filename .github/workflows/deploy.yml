@@ -31,12 +31,13 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          set -x
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1
-          # Test SSH connection
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$SSH_USER@$SSH_HOST" 'echo "SSH connection successful"'
+          wc -l ~/.ssh/deploy_key  # Check if key has content
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1 || { echo "ssh-keyscan failed"; cat ~/.ssh/known_hosts; exit 1; }
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -vvv "$SSH_USER@$SSH_HOST" 'echo "SSH connection successful"' || { echo "SSH connection failed"; exit 1; }
 
       - name: Deploy via rsync
         env:
