@@ -226,6 +226,19 @@ stl.output_char '\\n'     // newline
 stl.loop                  // halt`}</Pre>
       </Section>
 
+      <Section title="Multi-File Compilation Order">
+        <p className="mb-2">
+          When a project has multiple <Code>.fj</Code> files they are compiled
+          together in a single pass, in the order they appear in the{' '}
+          <b>Explorer sidebar</b> (top → bottom).
+        </p>
+        <ul className="space-y-1 text-xs" style={{ color: '#999' }}>
+          <li>• A file can only use macros / namespaces defined in itself or in files that appear <em>earlier</em> in the list.</li>
+          <li>• Drag &amp; drop files in the Explorer to change the compilation order.</li>
+          <li>• The first file is compiled first; its <Code>stl.startup</Code> call initialises the runtime.</li>
+        </ul>
+      </Section>
+
       <Section title="Common STL Macros">
         <table className="text-xs w-full mt-1" style={{ borderCollapse: 'collapse' }}>
           <tbody>
@@ -252,6 +265,16 @@ stl.loop                  // halt`}</Pre>
 
       <Section title="External Links">
         <ul className="space-y-1">
+          <li>
+            <a
+              href="https://github.com/tomhea/flip-jump/wiki"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#569cd6' }}
+            >
+              FlipJump Wiki (language reference, tutorials) ↗
+            </a>
+          </li>
           <li>
             <a
               href="https://esolangs.org/wiki/FlipJump"

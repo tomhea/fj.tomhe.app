@@ -21,6 +21,9 @@ interface ToolbarProps {
   onLoadExample: (ex: Example) => void;
   onCopyLink: () => void;
   onOpenDocs: () => void;
+  /** Non-null when a C→FJ conversion result is ready to run directly. */
+  c2fjOutput: string | null;
+  onRunC2fjSource: () => void;
 }
 
 export default function Toolbar({
@@ -28,6 +31,7 @@ export default function Toolbar({
   onCompile, onDownloadFjm, onRunFj, onRunFjm, onKill,
   onImportBf, onImportC, onImportFj, onImportFjm,
   onLoadExample, onCopyLink, onOpenDocs,
+  c2fjOutput, onRunC2fjSource,
 }: ToolbarProps) {
   const bfInputRef = useRef<HTMLInputElement>(null);
   const cInputRef = useRef<HTMLInputElement>(null);
@@ -318,6 +322,16 @@ export default function Toolbar({
       <ToolBtn onClick={() => cInputRef.current?.click()} title="Import C project (.c, .cpp, or .zip) → compile to FJ">
         <CIcon /> C → FJ
       </ToolBtn>
+
+      {/* Run C Output — only shown when a c2fj result is ready */}
+      {c2fjOutput && !isRunning && (
+        <ToolBtn
+          onClick={onRunC2fjSource}
+          title="Run the compiled C→FJ output directly (bypasses editor)"
+        >
+          <PlayIcon color="#5aa4e8" /> Run C Output
+        </ToolBtn>
+      )}
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
 

@@ -15,6 +15,9 @@ interface FileTreeProps {
   onCreateFile: (name: string) => void;
   onRenameFile: (id: string, name: string) => void;
   onDeleteFile: (id: string) => void;
+  onDeleteSource: (idx: number) => void;
+  /** Callback fired when the user drags a FJ file to a new position. */
+  onReorderFiles: (files: FJFile[]) => void;
   /** When true the tree stretches to fill its flex parent (used in the mobile drawer). */
   fullWidth?: boolean;
 }
@@ -25,6 +28,7 @@ export default function FileTree({
   collapsed, onToggleCollapsed,
   onSelectFile, onSelectSource,
   onCreateFile, onRenameFile, onDeleteFile,
+  onDeleteSource, onReorderFiles,
   fullWidth = false,
 }: FileTreeProps) {
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
@@ -32,6 +36,11 @@ export default function FileTree({
   const [editError, setEditError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Drag-and-drop reorder state
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // Hover state for source delete button
+  const [hoveredSourceIdx, setHoveredSourceIdx] = useState<number | null>(null);
 
   useEffect(() => {
     if (editingId) inputRef.current?.focus();
@@ -43,6 +52,20 @@ export default function FileTree({
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
   }, [contextMenu]);
+
+  // Reorder files: move the dragged file so it appears before the drop target.
+  function handleFileDrop(targetId: string) {
+    const fromIdx = files.findIndex((f) => f.id === draggedId);
+    const toIdx = files.findIndex((f) => f.id === targetId);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+
+    const next = [...files];
+    const [item] = next.splice(fromIdx, 1);
+    // After removing fromIdx, if the target was to the right it shifted left by 1.
+    const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx;
+    next.splice(insertAt, 0, item);
+    onReorderFiles(next);
+  }
 
   function startRename(file: FJFile) {
     setEditingId(file.id);
@@ -168,13 +191,36 @@ export default function FileTree({
               </div>
             ) : (
               <div
+                draggable
                 onClick={() => onSelectFile(file.id)}
                 onDoubleClick={() => startRename(file)}
                 onContextMenu={(e) => handleContextMenu(e, file.id)}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', file.id);
+                  setDraggedId(file.id);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverId !== file.id) setDragOverId(file.id);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleFileDrop(file.id);
+                  setDraggedId(null);
+                  setDragOverId(null);
+                }}
+                onDragLeave={() => setDragOverId(null)}
+                onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
                 className="flex items-center gap-1.5 px-3 py-0.5 cursor-pointer text-xs truncate transition-colors"
                 style={{
                   background: file.id === activeFileId && activeSourceIdx === null ? '#094771' : 'transparent',
-                  color: file.id === activeFileId && activeSourceIdx === null ? '#ffffff' : '#cccccc',
+                  color: file.id === activeFileId && activeSourceIdx === null ? '#ffffff'
+                    : draggedId === file.id ? '#555' : '#cccccc',
+                  opacity: draggedId === file.id ? 0.4 : 1,
+                  borderTop: dragOverId === file.id && draggedId !== file.id
+                    ? '2px solid #0078d4' : '2px solid transparent',
                 }}
                 onMouseEnter={(e) => {
                   if (!(file.id === activeFileId && activeSourceIdx === null))
@@ -223,25 +269,47 @@ export default function FileTree({
               <div
                 key={idx}
                 onClick={() => onSelectSource(idx)}
-                className="flex items-center gap-1.5 px-3 py-0.5 cursor-pointer text-xs truncate"
+                className="flex items-center gap-1.5 px-3 py-0.5 cursor-pointer text-xs"
                 style={{
                   background: activeSourceIdx === idx ? '#094771' : 'transparent',
                   color: activeSourceIdx === idx ? '#fff' : '#aaaaaa',
                 }}
                 onMouseEnter={e => {
+                  setHoveredSourceIdx(idx);
                   if (activeSourceIdx !== idx)
                     (e.currentTarget as HTMLDivElement).style.background = '#2a2d2e';
                 }}
                 onMouseLeave={e => {
+                  setHoveredSourceIdx(null);
                   if (activeSourceIdx !== idx)
                     (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                 }}
               >
                 {src.type === 'bf' ? <BfIcon /> : <CSourceIcon />}
-                <span className="truncate">{src.name}</span>
-                <span className="ml-auto shrink-0 text-xs" style={{ color: '#555', fontSize: 10 }}>
+                <span className="truncate flex-1 min-w-0">{src.name}</span>
+                <span className="shrink-0 text-xs ml-1" style={{ color: '#555', fontSize: 10 }}>
                   {src.type.toUpperCase()}
                 </span>
+                {hoveredSourceIdx === idx && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeleteSource(idx); }}
+                    title="Remove source"
+                    className="shrink-0 ml-1 rounded transition-colors"
+                    style={{
+                      color: '#888',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      lineHeight: 1,
+                      padding: '0 1px',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f44747'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#888'; }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             ))}
           </>
