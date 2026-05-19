@@ -212,7 +212,7 @@ export default function FileTree({
           <>
             <div
               className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-widest"
-              style={{ color: '#666' }}
+              style={{ color: '#9e9e9e' }}
             >
               Sources
             </div>

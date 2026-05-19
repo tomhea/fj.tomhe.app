@@ -589,6 +589,9 @@ export default function IDE() {
       className="flex flex-col"
       style={{ height: '100vh', background: '#1e1e1e', overflow: 'hidden' }}
     >
+      <header>
+      {/* Visually-hidden page title so screen readers and axe have an h1 landmark. */}
+      <h1 className="sr-only">FlipJump IDE</h1>
       <Toolbar
         compileStatus={compileStatus}
         runStatus={runStatus}
@@ -606,8 +609,9 @@ export default function IDE() {
         onCopyLink={copyLink}
         onOpenDocs={() => setDocsOpen(true)}
       />
+      </header>
 
-      <div className="flex flex-1 min-h-0">
+      <main className="flex flex-1 min-h-0">
         <FileTree
           files={files}
           activeFileId={activeFileId}
@@ -644,7 +648,7 @@ export default function IDE() {
             onStdinContentChange={setStdinContent}
           />
         </div>
-      </div>
+      </main>
 
       <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} />
     </div>

@@ -24,9 +24,10 @@ test.describe('Docs panel', () => {
     const panel = page.locator('[role="dialog"]');
     await expect(panel).toBeVisible();
     await page.keyboard.press('Escape');
-    // Panel uses transform translateX(100%) when closed — assert it's
-    // aria-hidden so the test isn't tied to the transition timing.
-    await expect(panel).toHaveAttribute('aria-hidden', 'true');
+    // Panel uses transform translateX(100%) when closed — assert it has `inert`
+    // so the test isn't tied to the transition timing.  We replaced aria-hidden
+    // with the inert attribute so focus/AT order is removed entirely.
+    await expect(panel).toHaveAttribute('inert', '');
   });
 
   test('closes on × button click', async ({ page }) => {
@@ -35,7 +36,7 @@ test.describe('Docs panel', () => {
     const panel = page.locator('[role="dialog"]');
     await expect(panel).toBeVisible();
     await panel.locator('button:has-text("×")').click();
-    await expect(panel).toHaveAttribute('aria-hidden', 'true');
+    await expect(panel).toHaveAttribute('inert', '');
   });
 
   test('Standard Library tab loads STL index and shows runlib.fj', async ({ page }) => {
