@@ -14,3 +14,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+
+export const metadata: Metadata = {
+  title: 'FlipJump Compiler',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32' },
+      { url: '/favicon-32.png', type: 'image/png', sizes: '128x128' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+};
