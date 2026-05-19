@@ -47,10 +47,10 @@ test.describe('STL search', () => {
   test('clicking a search result loads the file in the editor', async ({ page }) => {
     await openStlTab(page);
     await page.locator('input[aria-label="Search standard library"]').fill('runlib');
-    await page.locator('text=runlib.fj').first().click();
-    // The breadcrumb / path bar should show the selected file
-    await expect(page.locator('text=runlib.fj').first()).toBeVisible();
-    // The Monaco editor pane should appear
+    await page.locator('[role="button"]', { hasText: 'runlib.fj' }).first().click();
+    // The Monaco editor pane should appear with the selected file loaded
     await page.locator('.monaco-editor').waitFor({ timeout: 10_000 });
+    // The breadcrumb bar should show the file path
+    await expect(page.locator('text=runlib.fj').first()).toBeVisible();
   });
 });

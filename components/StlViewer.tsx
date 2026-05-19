@@ -23,7 +23,8 @@ function languageForStl(name: string): string {
 }
 
 export default function StlViewer() {
-  const [index, setIndex] = useState<StlIndex | null>(null);
+  // undefined = still loading, null = failed to load, StlIndex = loaded
+  const [index, setIndex] = useState<StlIndex | null | undefined>(undefined);
   const [selected, setSelected] = useState<StlEntry | null>(null);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -58,10 +59,17 @@ export default function StlViewer() {
     });
   }
 
-  if (!index) {
+  if (index === undefined) {
     return (
       <div className="flex-1 flex items-center justify-center text-sm" style={{ color: '#666' }}>
-        {index === null ? 'STL not available. Run npm run dev to fetch it.' : 'Loading…'}
+        Loading…
+      </div>
+    );
+  }
+  if (index === null) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm" style={{ color: '#666' }}>
+        STL not available. Run npm run dev to fetch it.
       </div>
     );
   }
@@ -211,10 +219,14 @@ function SearchResultItem({ entry, selected, onSelect }: {
   onSelect: (e: StlEntry) => void;
 }) {
   const isActive = selected?.path === entry.path;
+  function activate() { onSelect(entry); }
   return (
     <div
-      onClick={() => onSelect(entry)}
-      className="flex flex-col px-2 py-0.5 cursor-pointer text-xs truncate"
+      role="button"
+      tabIndex={0}
+      onClick={activate}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
+      className="flex flex-col px-2 py-0.5 cursor-pointer text-xs"
       style={{
         background: isActive ? '#094771' : 'transparent',
         color: isActive ? '#fff' : '#cccccc',

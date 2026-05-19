@@ -40,6 +40,45 @@ test.describe('Accessibility (axe)', () => {
     await expect(dialog).toHaveAttribute('aria-label', /.+/); // non-empty label
   });
 
+  test('no critical or serious violations on the STL Standard Library tab', async ({ page }) => {
+    await freshSession(page);
+    await toolbarBtn(page, 'Open language reference and STL viewer');
+    await page.locator('[role="dialog"]').waitFor();
+    await page.locator('button', { hasText: 'Standard Library' }).click();
+    await page.locator('input[aria-label="Search standard library"]').waitFor({ timeout: 10_000 });
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa'])
+      .exclude('.monaco-editor')
+      .analyze();
+    const blockers = results.violations.filter(
+      (v) => v.impact === 'critical' || v.impact === 'serious',
+    );
+    expect(blockers, JSON.stringify(blockers.map((v) => v.description), null, 2)).toHaveLength(0);
+  });
+
+  test('STL search results carry role=button and are Tab-focusable', async ({ page }) => {
+    await freshSession(page);
+    await toolbarBtn(page, 'Open language reference and STL viewer');
+    await page.locator('[role="dialog"]').waitFor();
+    await page.locator('button', { hasText: 'Standard Library' }).click();
+    await page.locator('input[aria-label="Search standard library"]').waitFor({ timeout: 10_000 });
+    await page.locator('input[aria-label="Search standard library"]').fill('runlib');
+
+    // Results must carry role="button" so keyboard users can reach them.
+    const firstResult = page.locator('[role="button"]', { hasText: 'runlib.fj' }).first();
+    await firstResult.waitFor({ timeout: 5_000 });
+    await expect(firstResult).toBeVisible();
+
+    // Tab from the search input — focus must stay inside the dialog.
+    await page.locator('input[aria-label="Search standard library"]').press('Tab');
+    const focusedInsideDialog = await page.evaluate(() => {
+      const active = document.activeElement;
+      const dialog = document.querySelector('[role="dialog"]');
+      return dialog !== null && active !== null && dialog.contains(active);
+    });
+    expect(focusedInsideDialog).toBe(true);
+  });
+
   test('all toolbar buttons have title attributes', async ({ page }) => {
     await freshSession(page);
     const buttons = page.locator('button[title]');
