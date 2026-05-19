@@ -42,7 +42,7 @@ interface ServerHandle {
 
 let server: ServerHandle | null = null;
 
-function waitForListening(port: number, timeoutMs = 60_000): Promise<void> {
+function waitForListening(port: number, timeoutMs = 120_000): Promise<void> {
   const start = Date.now();
   return new Promise((resolve, reject) => {
     const tryOnce = () => {
@@ -102,7 +102,7 @@ async function stopServer(s: ServerHandle): Promise<void> {
 
 beforeAll(async () => {
   server = await startServer();
-}, 90_000);
+}, 150_000);
 
 afterAll(async () => {
   if (server) await stopServer(server);

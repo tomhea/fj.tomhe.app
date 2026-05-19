@@ -25,6 +25,12 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    // Firefox and WebKit are opt-in: set ALL_BROWSERS=1 to include them.
+    // Run in CI via .github/workflows/e2e-cross-browser.yml (weekly + manual).
+    ...(process.env.ALL_BROWSERS ? [
+      { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+      { name: 'webkit',  use: { ...devices['Desktop Safari']  } },
+    ] : []),
   ],
 
   webServer: {
