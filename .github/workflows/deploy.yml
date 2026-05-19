@@ -33,7 +33,7 @@ jobs:
         run: |
           set -x
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           wc -l ~/.ssh/deploy_key  # Check if key has content
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1 || { echo "ssh-keyscan failed"; cat ~/.ssh/known_hosts; exit 1; }
