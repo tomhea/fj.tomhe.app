@@ -22,20 +22,22 @@ import {
 // Each test gets up to 30 s — the tsx bootstrap and Next.js dev compile
 // are slow, and the kill-mid-run test deliberately sleeps for a while.
 const TEST_TIMEOUT = 30_000;
-import { spawn, ChildProcessWithoutNullStreams, execSync } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { request as httpRequest } from 'http';
 import WebSocket from 'ws';
 import { join } from 'path';
 
-const PORT = 4567;
+// Pick a port deterministic per-PID so concurrent local runs don't clash,
+// and so a previously-aborted run that left a process on the same port
+// doesn't poison the next attempt.
+const PORT = 14500 + (process.pid % 1000);
 const HOST = `localhost:${PORT}`;
-const ORIGIN = `http://${HOST}`;
 const ALLOWED_ORIGIN = `http://${HOST}`;
 
 const REPO_ROOT = join(__dirname, '..', '..');
 
 interface ServerHandle {
-  proc: ChildProcessWithoutNullStreams;
+  proc: ChildProcess;
 }
 
 let server: ServerHandle | null = null;
@@ -61,11 +63,14 @@ function waitForListening(port: number, timeoutMs = 60_000): Promise<void> {
 async function startServer(): Promise<ServerHandle> {
   // Generous global cap so the suite doesn't starve itself; the per-IP
   // limit test temporarily expects a lower cap, configured via env below.
+  // Cast through Record because NodeJS.ProcessEnv constrains NODE_ENV to a
+  // string-literal union (when Next.js types augment it); the `as never`
+  // assignment is a narrow workaround for that case.
   const env = {
     ...process.env,
     PORT: String(PORT),
     HOSTNAME: 'localhost',
-    NODE_ENV: 'test',
+    NODE_ENV: 'test' as never,
     // Tight per-IP cap so the rate-limit test can prove the 429 path
     // without opening dozens of sockets. Other tests close sockets between
     // runs (see beforeEach) so this cap doesn't starve them.
@@ -77,11 +82,11 @@ async function startServer(): Promise<ServerHandle> {
     env,
     shell: process.platform === 'win32', // npx on Windows is a .cmd
     stdio: ['ignore', 'pipe', 'pipe'],
-  }) as ChildProcessWithoutNullStreams;
+  });
 
   // Drain stdout/stderr so the buffer doesn't fill and block the child.
-  proc.stdout.on('data', () => {});
-  proc.stderr.on('data', () => {});
+  proc.stdout?.on('data', () => {});
+  proc.stderr?.on('data', () => {});
 
   await waitForListening(PORT);
   return { proc };
