@@ -29,8 +29,7 @@
     "ws": "^8.20.1"
   },
   "overrides": {
-    "dompurify": ">=3.4.5",
-    "postcss": ">=8.5.10"
+    "dompurify": ">=3.4.5"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
@@ -47,6 +46,7 @@
     "eslint": "^10",
     "eslint-config-next": "^16",
     "jsdom": "^29.1.1",
+    "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
     "typescript": "^6",
     "vitest": "^4.1.6"
