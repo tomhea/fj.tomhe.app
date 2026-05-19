@@ -11,6 +11,11 @@ interface TerminalProps {
   onKill: () => void;
   stdinContent: string;
   onStdinContentChange: (v: string) => void;
+  /**
+   * When true the terminal fills its flex parent rather than using its own
+   * managed height. Used on mobile when the terminal tab is active.
+   */
+  fillHeight?: boolean;
 }
 
 const LINE_COLORS: Record<TerminalLine['type'], string> = {
@@ -23,6 +28,7 @@ const LINE_COLORS: Record<TerminalLine['type'], string> = {
 export default function Terminal({
   lines, runStatus, onSendStdin, onClear, onKill,
   stdinContent, onStdinContentChange,
+  fillHeight = false,
 }: TerminalProps) {
   const [stdinValue, setStdinValue] = useState('');
   const [height, setHeight] = useState(240);
@@ -45,51 +51,73 @@ export default function Terminal({
     }
   }
 
-  function onDragStart(e: React.MouseEvent) {
-    e.preventDefault();
-    dragRef.current = { startY: e.clientY, startH: height };
-    const move = (ev: MouseEvent) => {
+  // ── Resize drag (mouse + touch) ─────────────────────────────────────────
+  function startDrag(startY: number) {
+    dragRef.current = { startY, startH: height };
+
+    const move = (y: number) => {
       if (!dragRef.current) return;
-      const delta = dragRef.current.startY - ev.clientY;
+      const delta = dragRef.current.startY - y;
       setHeight(Math.max(80, Math.min(600, dragRef.current.startH + delta)));
     };
-    const up = () => {
+    const end = () => {
       dragRef.current = null;
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    const onMouseMove = (ev: MouseEvent) => move(ev.clientY);
+    const onMouseUp = end;
+    const onTouchMove = (ev: TouchEvent) => { ev.preventDefault(); move(ev.touches[0].clientY); };
+    const onTouchEnd = end;
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+  }
+
+  function onDragMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    startDrag(e.clientY);
+  }
+
+  function onDragTouchStart(e: React.TouchEvent) {
+    startDrag(e.touches[0].clientY);
   }
 
   const isRunning = runStatus === 'running';
 
+  // When fillHeight is true (mobile terminal tab), the component must fill its
+  // flex parent. We achieve this by making the root a flex-1 column and
+  // removing the explicit height.
+  const rootStyle = fillHeight
+    ? { background: '#1e1e1e', borderTop: '1px solid #3c3c3c', display: 'flex', flexDirection: 'column' as const, flex: 1, minHeight: 0 }
+    : { height: collapsed ? 32 : height, background: '#1e1e1e', borderTop: '1px solid #3c3c3c', transition: collapsed ? 'height 0.15s ease' : undefined };
+
   return (
-    <div
-      className="flex flex-col shrink-0"
-      style={{
-        height: collapsed ? 32 : height,
-        background: '#1e1e1e',
-        borderTop: '1px solid #3c3c3c',
-        transition: collapsed ? 'height 0.15s ease' : undefined,
-      }}
-    >
-      {!collapsed && (
+    <div className="flex flex-col shrink-0" style={rootStyle}>
+      {/* Drag handle — hidden on mobile (fillHeight) since height is managed by flex */}
+      {!collapsed && !fillHeight && (
         <div
-          className="w-full cursor-row-resize shrink-0"
-          style={{ height: 4, background: 'transparent' }}
-          onMouseDown={onDragStart}
+          className="w-full cursor-row-resize shrink-0 touch-none"
+          style={{ height: 6, background: 'transparent' }}
+          onMouseDown={onDragMouseDown}
+          onTouchStart={onDragTouchStart}
           onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#0078d4'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+          aria-label="Resize terminal"
+          role="separator"
+          aria-orientation="horizontal"
         />
       )}
 
       {/* Header with tabs */}
       <div
         className="flex items-center shrink-0 select-none"
-        style={{ height: 28, background: '#2d2d2d', borderBottom: collapsed ? 'none' : '1px solid #3c3c3c' }}
+        style={{ height: 32, background: '#2d2d2d', borderBottom: collapsed ? 'none' : '1px solid #3c3c3c' }}
       >
-        {/* Tabs */}
         {(['terminal', 'stdin'] as const).map(t => (
           <button
             key={t}
@@ -99,6 +127,8 @@ export default function Terminal({
               color: tab === t ? '#cccccc' : '#9e9e9e',
               borderBottom: tab === t ? '1px solid #0078d4' : '1px solid transparent',
               background: 'transparent',
+              // Ensure tappable area is tall enough on mobile
+              minWidth: 64,
             }}
           >
             {t === 'terminal' ? 'Terminal' : 'Pre-set Stdin'}
@@ -127,9 +157,12 @@ export default function Terminal({
         {tab === 'terminal' && (
           <HeaderBtn onClick={onClear} title="Clear terminal">Clear</HeaderBtn>
         )}
-        <HeaderBtn onClick={() => setCollapsed(c => !c)} title={collapsed ? 'Expand' : 'Collapse'}>
-          {collapsed ? '▲' : '▼'}
-        </HeaderBtn>
+        {/* Collapse/expand only available on desktop (when not fillHeight) */}
+        {!fillHeight && (
+          <HeaderBtn onClick={() => setCollapsed(c => !c)} title={collapsed ? 'Expand' : 'Collapse'}>
+            {collapsed ? '▲' : '▼'}
+          </HeaderBtn>
+        )}
       </div>
 
       {!collapsed && tab === 'terminal' && (
@@ -155,7 +188,7 @@ export default function Terminal({
 
           <div
             className="flex items-center shrink-0 px-3"
-            style={{ height: 32, background: '#252526', borderTop: '1px solid #3c3c3c' }}
+            style={{ height: 40, background: '#252526', borderTop: '1px solid #3c3c3c' }}
           >
             <span className="terminal-text mr-2" style={{ color: '#569cd6', userSelect: 'none' }}>{'>'}</span>
             <input
@@ -164,11 +197,14 @@ export default function Terminal({
               onChange={(e) => setStdinValue(e.target.value)}
               onKeyDown={handleStdinKeyDown}
               disabled={!isRunning}
-              placeholder={isRunning ? 'Type stdin input and press Enter…' : 'Run a program to enable input'}
+              placeholder={isRunning ? 'Type stdin and press Enter…' : 'Run a program to enable input'}
               className="flex-1 outline-none bg-transparent terminal-text"
               style={{ color: isRunning ? '#d4d4d4' : '#555', fontSize: 13 }}
               spellCheck={false}
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              inputMode="text"
             />
           </div>
         </>
@@ -192,6 +228,8 @@ export default function Terminal({
             }}
             placeholder="Enter stdin content here…"
             spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
           />
         </div>
       )}
@@ -209,8 +247,6 @@ function OutputLine({ line }: { line: TerminalLine }) {
           key={i}
           style={{
             color,
-            // pre-wrap so long single-line output wraps inside the terminal
-            // panel instead of forcing a horizontal scrollbar past the viewport
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
             minHeight: seg ? undefined : '0.5em',
@@ -236,7 +272,7 @@ function HeaderBtn({
       onClick={onClick}
       title={title}
       className="px-2 py-0.5 text-xs rounded transition-colors"
-      style={{ color: danger ? '#f44747' : '#969696' }}
+      style={{ color: danger ? '#f44747' : '#969696', minHeight: 32 }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#3a3a3a'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
     >

@@ -46,6 +46,29 @@ html, body {
   background-color: var(--ide-bg);
   color: var(--ide-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Prevent iOS Safari elastic over-scroll from showing white behind the app */
+  overscroll-behavior: none;
+}
+
+/**
+ * .ide-root — outermost IDE container.
+ *
+ * Two-value height cascade: browsers that understand dvh (dynamic viewport
+ * height) use it; older browsers keep 100vh.  dvh shrinks/grows as the iOS
+ * Safari address-bar and toolbar animate in/out, so the IDE always fills
+ * exactly the *visible* area and the bottom is never hidden behind the
+ * browser chrome.
+ *
+ * padding-bottom respects the iPhone home-indicator safe area (requires
+ * viewport-fit=cover in the <meta viewport> tag).
+ */
+.ide-root {
+  height: 100vh;
+  /* stylelint-disable-next-line unit-no-unknown */
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left:   env(safe-area-inset-left);
+  padding-right:  env(safe-area-inset-right);
 }
 
 #__next {

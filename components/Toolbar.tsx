@@ -159,7 +159,16 @@ export default function Toolbar({
   return (
     <div
       className="flex items-center gap-1 px-3 py-1 shrink-0 select-none relative overflow-x-auto"
-      style={{ background: '#323233', borderBottom: '1px solid #3c3c3c', height: 40 }}
+      style={{
+        background: '#323233',
+        borderBottom: '1px solid #3c3c3c',
+        height: 48, // 48px on mobile gives a more comfortable touch target height
+        // Smooth momentum scrolling on iOS
+        WebkitOverflowScrolling: 'touch',
+        // Allow horizontal swipe to scroll toolbar without interfering with
+        // vertical page scroll (not that the page scrolls, but good practice)
+        touchAction: 'pan-x',
+      }}
     >
       {/* Logo */}
       <span className="font-bold text-sm mr-3" style={{ color: '#e8c47a', letterSpacing: 1 }}>
@@ -336,11 +345,13 @@ const ToolBtn = forwardRef<HTMLButtonElement, {
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors shrink-0"
       style={{
         color: disabled ? '#666' : accent ? '#fff' : '#cccccc',
         background: accent ? '#c72e2e' : 'transparent',
         cursor: disabled ? 'not-allowed' : 'pointer',
+        minHeight: 36, // comfortable touch target
+        whiteSpace: 'nowrap',
       }}
       onMouseEnter={(e) => {
         if (!disabled && !accent) (e.currentTarget as HTMLButtonElement).style.background = '#3a3a3a';

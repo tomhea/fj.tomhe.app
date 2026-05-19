@@ -1,5 +1,17 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+
+/**
+ * viewport-fit=cover lets the page extend edge-to-edge on iPhone notch /
+ * Dynamic Island / home-indicator screens. We then use
+ * env(safe-area-inset-*) in CSS to keep interactive content clear of those
+ * areas. Without this the safe-area env() vars are always 0.
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   title: 'FlipJump Interpreter',
