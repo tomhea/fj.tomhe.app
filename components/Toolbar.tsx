@@ -41,7 +41,7 @@ export default function Toolbar({
   type ShortState = 'idle' | 'loading' | 'copied' | 'error' | 'cooldown';
   const [shortState, setShortState] = useState<ShortState>('idle');
   const [shortUrl, setShortUrl] = useState('');
-  const [shortTooltipPos, setShortTooltipPos] = useState<{ bottom: number; left: number } | null>(null);
+  const [shortTooltipPos, setShortTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Recompute dropdown position whenever it opens or the window resizes/scrolls.
@@ -118,7 +118,7 @@ export default function Toolbar({
   }
 
   async function handleShortLink() {
-    if (shortState === 'loading' || shortState === 'cooldown') return;
+    if (shortState === 'loading' || shortState === 'copied' || shortState === 'cooldown') return;
     const longUrl = window.location.href;
     if (!longUrl.includes('#share=')) {
       // Nothing shared yet — fall back to generating the share URL first
@@ -127,9 +127,9 @@ export default function Toolbar({
     const urlToShorten = window.location.href;
     setShortState('loading');
 
-    // Position the tooltip above the button
+    // Position the tooltip below the button
     const rect = shortBtnRef.current?.getBoundingClientRect();
-    if (rect) setShortTooltipPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+    if (rect) setShortTooltipPos({ top: rect.bottom + 6, left: rect.left });
 
     try {
       const res = await fetch('https://spoo.me/', {
@@ -267,7 +267,7 @@ export default function Toolbar({
         <ToolBtn
           ref={shortBtnRef}
           onClick={handleShortLink}
-          disabled={shortState === 'loading' || shortState === 'cooldown'}
+          disabled={shortState === 'loading' || shortState === 'copied' || shortState === 'cooldown'}
           title={
             shortState === 'cooldown' ? 'Please wait before generating another short link' :
             'Shorten link via spoo.me and copy to clipboard'
@@ -284,7 +284,7 @@ export default function Toolbar({
           <div
             className="fixed text-xs rounded px-2 py-1 shadow-lg pointer-events-none"
             style={{
-              bottom: shortTooltipPos.bottom,
+              top: shortTooltipPos.top,
               left: shortTooltipPos.left,
               background: '#1e1e1e',
               border: '1px solid #454545',
