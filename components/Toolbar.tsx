@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, forwardRef } from 'react';
+import { createPortal } from 'react-dom';
 import { CompileStatus, RunStatus } from '@/lib/types';
 import { EXAMPLES, Example } from '@/lib/examples';
 
@@ -32,8 +33,26 @@ export default function Toolbar({
   const cInputRef = useRef<HTMLInputElement>(null);
   const fjInputRef = useRef<HTMLInputElement>(null);
   const fjmInputRef = useRef<HTMLInputElement>(null);
+  const examplesBtnRef = useRef<HTMLButtonElement>(null);
   const [examplesOpen, setExamplesOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // Recompute dropdown position whenever it opens or the window resizes/scrolls.
+  useEffect(() => {
+    if (!examplesOpen) return;
+    function updatePos() {
+      const rect = examplesBtnRef.current?.getBoundingClientRect();
+      if (rect) setDropdownPos({ top: rect.bottom + 2, left: rect.left });
+    }
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [examplesOpen]);
 
   const isRunning = runStatus === 'running';
   const isCompiling = compileStatus === 'compiling';
@@ -110,17 +129,28 @@ export default function Toolbar({
         <FolderOpenIcon /> Import FJ
       </ToolBtn>
 
-      {/* Examples dropdown */}
-      <div className="relative">
-        <ToolBtn onClick={() => setExamplesOpen(o => !o)} title="Load a built-in example">
+      {/* Examples dropdown — panel is portalled to <body> so the toolbar's
+          overflow-x-auto scroll container cannot clip it. */}
+      <div>
+        <ToolBtn
+          ref={examplesBtnRef}
+          onClick={() => setExamplesOpen(o => !o)}
+          title="Load a built-in example"
+        >
           <StarIcon /> Examples
         </ToolBtn>
-        {examplesOpen && (
+        {examplesOpen && dropdownPos && createPortal(
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setExamplesOpen(false)} />
+            <div className="fixed inset-0 z-40" onClick={() => setExamplesOpen(false)} />
             <div
-              className="absolute top-full left-0 z-20 rounded shadow-lg py-1 text-xs"
-              style={{ background: '#252526', border: '1px solid #454545', minWidth: 180, marginTop: 2 }}
+              className="fixed z-50 rounded shadow-lg py-1 text-xs"
+              style={{
+                background: '#252526',
+                border: '1px solid #454545',
+                minWidth: 180,
+                top: dropdownPos.top,
+                left: dropdownPos.left,
+              }}
             >
               {EXAMPLES.map(ex => (
                 <button
@@ -136,7 +166,8 @@ export default function Toolbar({
                 </button>
               ))}
             </div>
-          </>
+          </>,
+          document.body,
         )}
       </div>
 
@@ -210,17 +241,16 @@ export default function Toolbar({
   );
 }
 
-function ToolBtn({
-  children, onClick, disabled, title, accent,
-}: {
+const ToolBtn = forwardRef<HTMLButtonElement, {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   title?: string;
   accent?: boolean;
-}) {
+}>(function ToolBtn({ children, onClick, disabled, title, accent }, ref) {
   return (
     <button
+      ref={ref}
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -240,7 +270,7 @@ function ToolBtn({
       {children}
     </button>
   );
-}
+});
 
 // --- Icons ---
 
