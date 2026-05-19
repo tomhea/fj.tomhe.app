@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -63,7 +63,7 @@ jobs:
     timeout-minutes: 25
     needs: unit-and-api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
