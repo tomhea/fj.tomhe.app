@@ -24,6 +24,33 @@ const RUN_TIMEOUT_MS = 5 * 60 * 1000;
 const KILL_GRACE_MS = 2_000;
 const WS_MAX_PAYLOAD = 4 * 1024 * 1024;
 
+// Concurrency caps — each connection can spawn an fj subprocess on demand,
+// so without a limit a small number of clients can exhaust CPU/RAM/FDs.
+// Overridable via env for staging or load-testing.
+const MAX_CONNECTIONS_PER_IP = parseInt(
+  process.env.WS_MAX_CONNECTIONS_PER_IP ?? '4',
+  10,
+);
+const MAX_TOTAL_CONNECTIONS = parseInt(
+  process.env.WS_MAX_TOTAL_CONNECTIONS ?? '32',
+  10,
+);
+
+// In-memory connection accounting. Process-local — when running behind
+// multiple workers, an external store (Redis) would be needed instead.
+const perIpConnections = new Map<string, number>();
+let totalConnections = 0;
+
+function clientIp(req: IncomingMessage): string {
+  // Behind a reverse proxy, the real client is in X-Forwarded-For. We trust
+  // the leftmost entry; ops must set the proxy to drop client-supplied XFF.
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.length > 0) {
+    return xff.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
 // Comma-separated list, or default to local dev origins + the deploy host.
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS ?? '')
@@ -289,7 +316,29 @@ app.prepare().then(() => {
       socket.destroy();
       return;
     }
+
+    // Connection limits. Reply with HTTP 429 before completing the WS
+    // handshake so well-behaved clients see a clear status code.
+    const ip = clientIp(req);
+    const ipCount = perIpConnections.get(ip) ?? 0;
+    if (totalConnections >= MAX_TOTAL_CONNECTIONS || ipCount >= MAX_CONNECTIONS_PER_IP) {
+      socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    totalConnections++;
+    perIpConnections.set(ip, ipCount + 1);
+
     wss.handleUpgrade(req, socket, head, (ws) => {
+      // Decrement on close — keep counters honest even if the runner errors
+      // before/after spawn.
+      ws.once('close', () => {
+        totalConnections = Math.max(0, totalConnections - 1);
+        const n = (perIpConnections.get(ip) ?? 1) - 1;
+        if (n <= 0) perIpConnections.delete(ip);
+        else perIpConnections.set(ip, n);
+      });
       wss.emit('connection', ws, req);
     });
   });
