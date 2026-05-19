@@ -14,26 +14,51 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v6.4.0
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install + build
-        run: | 
+        run: |
           npm ci
           npm run build
 
-      - name: Deploy via rsync + restart service
-        uses: appleboy/ssh-action@v1.2.5
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /var/www/fj/
-            rsync -avz --delete --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='.env.local' --exclude='.next/cache' .
-            npm ci --omit=dev
-            sudo systemctl restart fj
+      - name: Set up SSH key
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy via rsync (CI → server)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          # Push the built working tree from the CI runner to the server.
+          # Excluded from sync:
+          #   node_modules/   — reinstalled server-side via npm ci
+          #   .next/cache     — next.js incremental build cache (server-local)
+          #   .env.local      — server-side secrets, never overwritten by CI
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='.env.local' \
+            --exclude='.next/cache' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "$SSH_USER@$SSH_HOST:/var/www/fj/"
+
+      - name: Reinstall prod deps + restart service on host
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
+            'cd /var/www/fj && npm ci --omit=dev && sudo systemctl restart fj'
