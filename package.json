@@ -19,7 +19,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
     "adm-zip": "^0.5.16",
-    "cross-env": "^7.0.3",
+    "cross-env": "^10.1.0",
     "fflate": "^0.8.3",
     "next": "^15",
     "react": "^19",
