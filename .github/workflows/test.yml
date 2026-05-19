@@ -23,7 +23,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6.4.0
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
 
       - name: Set up Python (for fj + bf2fj)
@@ -68,7 +68,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6.4.0
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
 
       - name: Set up Python (for fj on PATH)
