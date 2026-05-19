@@ -25,38 +25,14 @@ jobs:
           npm ci
           npm run build
 
-      - name: Set up SSH key
-        env:
-          SSH_KEY:  ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          set -x
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          wc -l ~/.ssh/deploy_key  # Check if key has content
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1 || { echo "ssh-keyscan failed"; cat ~/.ssh/known_hosts; exit 1; }
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -vvv "$SSH_USER@$SSH_HOST" 'echo "SSH connection successful"' || { echo "SSH connection failed"; exit 1; }
-
-      - name: Deploy via rsync
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          rsync -avz --delete \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='node_modules' \
-            --exclude='.env.local' \
-            --exclude='.next/cache' \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=60" \
-            ./ "$SSH_USER@$SSH_HOST:/var/www/fj/"
-
-      - name: Reinstall + restart service on host
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
-            'cd /var/www/fj && npm ci --omit=dev && sudo systemctl restart fj'
+      - name: Deploy via rsync + restart service
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/fj/
+            rsync -avz --delete --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='.env.local' --exclude='.next/cache'
+            npm ci --omit=dev
+            sudo systemctl restart fj
