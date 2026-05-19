@@ -1,0 +1,50 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Monday 9 AM UTC
+  push:
+    branches: [main]
+
+jobs:
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Audit for high/critical vulnerabilities
+        run: npm audit --audit-level=high
+        # Informational only — does not block merge. Review weekly results manually.
+        continue-on-error: true
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

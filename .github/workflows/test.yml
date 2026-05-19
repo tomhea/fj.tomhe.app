@@ -51,8 +51,7 @@ jobs:
         run: npm run typecheck
 
       - name: Lint
-        # eslint-config-next requires interactive setup; skip if not present.
-        run: npm run lint --if-present || true
+        run: npm run lint --if-present
 
       - name: Vitest (unit, API, WS runner)
         run: npm test
