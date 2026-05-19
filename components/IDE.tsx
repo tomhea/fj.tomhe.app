@@ -259,6 +259,23 @@ export default function IDE() {
     [addLine],
   );
 
+  const deleteSource = useCallback((idx: number) => {
+    setSources((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      return next;
+    });
+    setActiveSourceIdx((current) => {
+      if (current === null) return null;
+      if (current === idx) return null;          // deleted the active one
+      if (current > idx) return current - 1;    // indices shifted
+      return current;
+    });
+  }, []);
+
+  const reorderFiles = useCallback((reordered: FJFile[]) => {
+    setFiles(reordered);
+  }, []);
+
   const importFjFiles = useCallback(
     (incoming: Array<{ name: string; content: string }>) => {
       setFiles((prev) => {
@@ -471,8 +488,17 @@ export default function IDE() {
         };
         if (data.stderr?.trim()) addLine('stderr', data.stderr.trim());
         if (data.success && data.fjContent) {
-          importSingleFj('output.fj', data.fjContent);
-          addLine('info', '✓ Imported output.fj');
+          // Store the generated FJ in the source entry rather than opening it
+          // in the editor — c2fj output can be very large and would freeze
+          // Monaco.  The Toolbar surfaces a "Run C Output" button instead.
+          setSources((prev) =>
+            prev.map((s) =>
+              s.name === file?.name && s.type === 'c'
+                ? { ...s, fjOutput: data.fjContent! }
+                : s,
+            ),
+          );
+          addLine('info', '✓ C→FJ ready. Click "Run C Output" in the toolbar to execute.');
         } else {
           addLine('error', data.error ?? 'C conversion failed.');
         }
@@ -481,7 +507,7 @@ export default function IDE() {
         addLine('error', `c2fj error: ${(err as Error).message}`);
       }
     },
-    [importSingleFj, addLine],
+    [addLine],
   );
 
   // ── WebSocket Runner ──────────────────────────────────────────────────────
@@ -491,7 +517,7 @@ export default function IDE() {
   }, []);
 
   const runOnline = useCallback(
-    async (mode: 'fj' | 'fjm') => {
+    async (mode: 'fj' | 'fjm', filesOverride?: Array<{ name: string; content: string }>) => {
       if (runStatus === 'running') return;
 
       clearTerminal();
@@ -516,7 +542,7 @@ export default function IDE() {
           ws.send(
             JSON.stringify({
               type: 'run_fj',
-              files: files.map((f) => ({ name: f.name, content: f.content })),
+              files: filesOverride ?? files.map((f) => ({ name: f.name, content: f.content })),
               initialStdin: stdinContent || undefined,
             }),
           );
@@ -630,6 +656,20 @@ export default function IDE() {
     [addLine],
   );
 
+  /**
+   * Run the FJ output produced by the most-recent C→FJ conversion directly,
+   * bypassing the editor.  Used when the generated file is too large for Monaco.
+   */
+  const runC2fjSource = useCallback(() => {
+    const src = sources.find((s) => s.type === 'c' && s.fjOutput);
+    if (src?.fjOutput) {
+      runOnline('fj', [{ name: 'output.fj', content: src.fjOutput }]);
+    }
+  }, [sources, runOnline]);
+
+  // Non-null when there's a pending c2fj result that can be run directly.
+  const c2fjOutput = sources.find((s) => s.type === 'c' && s.fjOutput)?.fjOutput ?? null;
+
   // On mobile, automatically reveal the terminal tab when a run starts so the
   // user doesn't have to manually switch to see output.
   useEffect(() => {
@@ -692,6 +732,8 @@ export default function IDE() {
           onLoadExample={loadExample}
           onCopyLink={copyLink}
           onOpenDocs={() => setDocsOpen(true)}
+          c2fjOutput={c2fjOutput}
+          onRunC2fjSource={runC2fjSource}
         />
       </header>
 
@@ -720,6 +762,8 @@ export default function IDE() {
             onCreateFile={createFile}
             onRenameFile={renameFile}
             onDeleteFile={deleteFile}
+            onDeleteSource={deleteSource}
+            onReorderFiles={reorderFiles}
           />
         </div>
 

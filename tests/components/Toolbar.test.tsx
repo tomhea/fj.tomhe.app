@@ -24,6 +24,8 @@ function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
     onLoadExample: vi.fn(),
     onCopyLink: vi.fn(),
     onOpenDocs: vi.fn(),
+    c2fjOutput: null,
+    onRunC2fjSource: vi.fn(),
     ...overrides,
   };
 }

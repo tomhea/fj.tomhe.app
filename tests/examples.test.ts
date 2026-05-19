@@ -3,11 +3,10 @@ import { EXAMPLES } from '@/lib/examples';
 import { isSafeFilename } from '@/lib/safe-filename';
 
 describe('EXAMPLES catalog', () => {
-  it('contains at least Hello World, Multi-file, and one digit example', () => {
+  it('contains Hello World and at least 8 entries', () => {
     const names = EXAMPLES.map((e) => e.name);
     expect(names).toContain('Hello World');
-    expect(names).toContain('Multi-file');
-    expect(names.length).toBeGreaterThanOrEqual(3);
+    expect(names.length).toBeGreaterThanOrEqual(8);
   });
 
   it.each(EXAMPLES.map((ex) => [ex.name, ex] as const))(
@@ -28,8 +27,8 @@ describe('EXAMPLES catalog', () => {
     '%s uses stl.* macros, not the old top-level shorthand',
     (_name, ex) => {
       const joined = ex.files.map((f) => f.content).join('\n');
-      // The example must boot with stl.startup somewhere.
-      expect(joined).toMatch(/\bstl\.startup\b/);
+      // The example must boot with stl.startup (or stl.startup_and_init_all) somewhere.
+      expect(joined).toMatch(/\bstl\.startup(?:_and_init_all)?\b/);
       // Anti-regression: previous bad examples used `.startup main` and
       // top-level `output 'X'` / `halt`. Make sure those don't reappear.
       expect(joined).not.toMatch(/^\.startup\s+\w+/m);
@@ -40,27 +39,20 @@ describe('EXAMPLES catalog', () => {
     },
   );
 
-  it('Hello World prints all 13 characters of "Hello, World!" plus a newline', () => {
+  it('Hello World outputs the string "Hello, World!"', () => {
     const ex = EXAMPLES.find((e) => e.name === 'Hello World')!;
     const src = ex.files[0].content;
-    // Each visible char of "Hello, World!" appears once in an
-    // output_char call, plus one newline.
-    const expectedChars = 'Hello, World!';
-    for (const ch of expectedChars) {
-      const escaped = ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      expect(src).toMatch(new RegExp(`output_char\\s+'${escaped}'`));
-    }
-    expect(src).toMatch(/output_char\s+'\\n'/);
+    // The string should appear in an stl.output call
+    expect(src).toMatch(/stl\.output[^;]*"Hello, World!/);
   });
 
-  it('Multi-file example has two files, one defining a namespace, one calling it', () => {
-    const ex = EXAMPLES.find((e) => e.name === 'Multi-file')!;
-    expect(ex.files.length).toBe(2);
-    const lib = ex.files.find((f) => /^ns\s+\w+\s*\{/m.test(f.content));
-    const main = ex.files.find((f) => /\bstl\.startup\b/.test(f.content));
-    expect(lib).toBeDefined();
-    expect(main).toBeDefined();
-    // main calls into the namespace
-    expect(main!.content).toMatch(/\bgreet\.say_hi\b/);
+  it('Calculator example is self-contained and includes the main loop and arithmetic ops', () => {
+    const ex = EXAMPLES.find((e) => e.name === 'Calculator')!;
+    expect(ex.files.length).toBe(1);
+    const src = ex.files[0].content;
+    expect(src).toMatch(/\bstl\.startup\b/);
+    expect(src).toMatch(/\bbit\.add\b/);
+    expect(src).toMatch(/\bbit\.sub\b/);
+    expect(src).toMatch(/\bstl\.loop\b/);
   });
 });

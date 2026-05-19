@@ -18,6 +18,8 @@ const BASE_PROPS = {
   onCreateFile: vi.fn(),
   onRenameFile: vi.fn(),
   onDeleteFile: vi.fn(),
+  onDeleteSource: vi.fn(),
+  onReorderFiles: vi.fn(),
 };
 
 function makeProps(

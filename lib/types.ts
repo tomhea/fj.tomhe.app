@@ -8,6 +8,12 @@ export interface SourceFile {
   name: string;
   type: 'bf' | 'c';
   content: string;
+  /**
+   * For type 'c' only: the FJ code produced by c2fj.
+   * Stored here (not in the editor) so that large generated files do not
+   * freeze Monaco.  Toolbar exposes a "Run C Output" button when this is set.
+   */
+  fjOutput?: string;
 }
 
 export interface MonacoMarker {
