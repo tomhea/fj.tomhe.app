@@ -132,12 +132,12 @@ export default function Toolbar({
     if (rect) setShortTooltipPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
 
     try {
-      const res = await fetch('https://spoo.me/', {
+      const res = await fetch('/api/shorten', {
         method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ url: urlToShorten }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlToShorten }),
       });
-      if (!res.ok) throw new Error(`spoo.me ${res.status}`);
+      if (!res.ok) throw new Error(`shorten ${res.status}`);
       const data = await res.json() as { short_url: string };
       const short = data.short_url;
       await navigator.clipboard.writeText(short);
