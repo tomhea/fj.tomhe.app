@@ -127,6 +127,9 @@ export default function IDE() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => loadFromLocalStorage<boolean>('fj-ide-sidebar-collapsed') ?? false,
   );
+  // Mobile tab: 'editor' shows the code editor, 'terminal' shows the output.
+  // Auto-switches to 'terminal' when a run starts so the user sees output.
+  const [mobileTab, setMobileTab] = useState<'editor' | 'terminal'>('editor');
   const wsRef = useRef<WebSocket | null>(null);
   const runStartRef = useRef<number>(0);
   const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -614,6 +617,12 @@ export default function IDE() {
     [addLine],
   );
 
+  // On mobile, automatically reveal the terminal tab when a run starts so the
+  // user doesn't have to manually switch to see output.
+  useEffect(() => {
+    if (runStatus === 'running') setMobileTab('terminal');
+  }, [runStatus]);
+
   // First-visit hint: surface a non-noisy nudge in the terminal instead of
   // auto-running. The previous auto-run was confusing on networks where
   // /ws/run is blocked (corp proxies) and surprising in general.
@@ -635,73 +644,181 @@ export default function IDE() {
     };
   }, []);
 
+  const isRunning = runStatus === 'running';
+
   return (
+    // .ide-root applies 100dvh (with 100vh fallback) and safe-area padding.
     <div
-      className="flex flex-col"
-      style={{ height: '100vh', background: '#1e1e1e', overflow: 'hidden' }}
+      className="ide-root flex flex-col"
+      style={{ background: '#1e1e1e', overflow: 'hidden' }}
     >
       <header>
-      {/* Visually-hidden page title so screen readers and axe have an h1 landmark. */}
-      <h1 className="sr-only">FlipJump IDE</h1>
-      <Toolbar
-        compileStatus={compileStatus}
-        runStatus={runStatus}
-        compiledFjm={compiledFjm}
-        onCompile={compile}
-        onDownloadFjm={downloadFjm}
-        onRunFj={() => runOnline('fj')}
-        onRunFjm={() => runOnline('fjm')}
-        onKill={killProcess}
-        onImportBf={importBf}
-        onImportC={importC}
-        onImportFj={importFjFiles}
-        onImportFjm={importFjm}
-        onLoadExample={loadExample}
-        onCopyLink={copyLink}
-        onOpenDocs={() => setDocsOpen(true)}
-      />
+        {/* Visually-hidden page title so screen readers and axe have an h1 landmark. */}
+        <h1 className="sr-only">FlipJump IDE</h1>
+        <Toolbar
+          compileStatus={compileStatus}
+          runStatus={runStatus}
+          compiledFjm={compiledFjm}
+          onCompile={compile}
+          onDownloadFjm={downloadFjm}
+          onRunFj={() => runOnline('fj')}
+          onRunFjm={() => runOnline('fjm')}
+          onKill={killProcess}
+          onImportBf={importBf}
+          onImportC={importC}
+          onImportFj={importFjFiles}
+          onImportFjm={importFjm}
+          onLoadExample={loadExample}
+          onCopyLink={copyLink}
+          onOpenDocs={() => setDocsOpen(true)}
+        />
       </header>
 
+      {/* ── Main content area ─────────────────────────────────────────── */}
       <main className="flex flex-1 min-h-0">
+        {/* File tree — always present but starts hidden on mobile */}
         <FileTree
           files={files}
           activeFileId={activeFileId}
           sources={sources}
           activeSourceIdx={activeSourceIdx}
+          // On mobile the sidebar is always collapsed; the toggle in the
+          // FileTree header still lets the user expand it for a moment.
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
-          onSelectFile={selectFile}
-          onSelectSource={selectSource}
+          onSelectFile={(id) => { selectFile(id); setMobileTab('editor'); }}
+          onSelectSource={(idx) => { selectSource(idx); setMobileTab('editor'); }}
           onCreateFile={createFile}
           onRenameFile={renameFile}
           onDeleteFile={deleteFile}
         />
 
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
-          <CodeEditor
-            file={viewFile}
-            onChange={(content) => {
-              if (activeSourceIdx === null && activeFile) {
-                updateFileContent(activeFile.id, content);
-              }
-            }}
-            markers={markers}
-            readOnly={viewReadOnly}
-            overrideLanguage={viewLanguage}
-          />
-          <Terminal
-            lines={terminalLines}
-            runStatus={runStatus}
-            onSendStdin={sendStdin}
-            onClear={clearTerminal}
-            onKill={killProcess}
-            stdinContent={stdinContent}
-            onStdinContentChange={setStdinContent}
-          />
+          {/* Editor panel
+              Desktop (md+): always visible, fills remaining space.
+              Mobile: only visible when editor tab is active, fills all space. */}
+          <div className={[
+            'flex flex-col min-h-0',
+            mobileTab === 'editor' ? 'flex-1' : 'hidden',
+            'md:flex md:flex-1',
+          ].join(' ')}>
+            <CodeEditor
+              file={viewFile}
+              onChange={(content) => {
+                if (activeSourceIdx === null && activeFile) {
+                  updateFileContent(activeFile.id, content);
+                }
+              }}
+              markers={markers}
+              readOnly={viewReadOnly}
+              overrideLanguage={viewLanguage}
+            />
+          </div>
+
+          {/* Terminal panel
+              Desktop (md+): always visible at its own managed height.
+              Mobile: only visible when terminal tab is active, fills all space. */}
+          <div className={[
+            'flex flex-col min-h-0',
+            mobileTab === 'terminal' ? 'flex-1' : 'hidden',
+            'md:flex md:flex-none',
+          ].join(' ')}>
+            <Terminal
+              lines={terminalLines}
+              runStatus={runStatus}
+              onSendStdin={sendStdin}
+              onClear={clearTerminal}
+              onKill={killProcess}
+              stdinContent={stdinContent}
+              onStdinContentChange={setStdinContent}
+              fillHeight={mobileTab === 'terminal'}
+            />
+          </div>
         </div>
       </main>
 
+      {/* ── Mobile bottom tab bar (hidden on md+) ─────────────────────── */}
+      <nav
+        className="flex md:hidden shrink-0 border-t"
+        style={{ background: '#252526', borderColor: '#3c3c3c' }}
+        aria-label="Panel switcher"
+      >
+        <MobileTabBtn
+          active={mobileTab === 'editor'}
+          onClick={() => setMobileTab('editor')}
+          icon={<EditorIcon />}
+          label="Editor"
+        />
+        <MobileTabBtn
+          active={mobileTab === 'terminal'}
+          onClick={() => setMobileTab('terminal')}
+          icon={<TerminalIcon active={isRunning} />}
+          label={isRunning ? 'Running…' : 'Terminal'}
+          badge={isRunning}
+        />
+      </nav>
+
       <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} />
     </div>
+  );
+}
+
+// ── Mobile bottom-tab helpers ─────────────────────────────────────────────────
+
+function MobileTabBtn({
+  active, onClick, icon, label, badge,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  badge?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center justify-center flex-1 gap-0.5 py-2 text-xs relative"
+      style={{
+        color: active ? '#4fc1ff' : '#888',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        minHeight: 52, // 52px tall — comfortable touch target
+      }}
+    >
+      {badge && (
+        <span
+          className="absolute top-1.5 right-[calc(50%-10px)] w-2 h-2 rounded-full"
+          style={{ background: '#73c991' }}
+        />
+      )}
+      {icon}
+      <span style={{ fontWeight: active ? 600 : 400 }}>{label}</span>
+      {active && (
+        <span
+          className="absolute top-0 left-4 right-4 h-0.5 rounded-full"
+          style={{ background: '#4fc1ff' }}
+        />
+      )}
+    </button>
+  );
+}
+
+function EditorIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M4 4l3 4-3 4M9 12h4" />
+    </svg>
+  );
+}
+
+function TerminalIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="1" y="2" width="14" height="12" rx="1.5" />
+      <path d="M4 6l3 2-3 2" strokeLinecap="round" strokeLinejoin="round"
+        style={{ stroke: active ? '#73c991' : 'currentColor' }} />
+      <path d="M9 10h3" strokeLinecap="round" />
+    </svg>
   );
 }
