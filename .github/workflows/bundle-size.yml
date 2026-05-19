@@ -1,0 +1,41 @@
+name: Bundle Size
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  size:
+    name: Check bundle size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install deps + build
+        run: npm ci && npm run build
+
+      - name: Report chunk sizes
+        run: |
+          echo "### Bundle sizes" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          du -sh .next/static/chunks/*.js 2>/dev/null | sort -rh | head -20 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if any chunk exceeds 2 MB
+        run: |
+          MAX_KB=2048
+          FAILED=0
+          for f in .next/static/chunks/*.js; do
+            [ -f "$f" ] || continue
+            size_kb=$(du -k "$f" | cut -f1)
+            if [ "$size_kb" -gt "$MAX_KB" ]; then
+              echo "FAIL: $f is ${size_kb} KB (limit: ${MAX_KB} KB)"
+              FAILED=1
+            fi
+          done
+          exit $FAILED
