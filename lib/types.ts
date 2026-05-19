@@ -23,6 +23,8 @@ export interface TerminalLine {
   type: 'stdout' | 'stderr' | 'info' | 'error';
   text: string;
   id: number;
+  /** True while this line is still receiving chunks (no \n yet). */
+  partial?: boolean;
 }
 
 export type CompileStatus = 'idle' | 'compiling' | 'success' | 'error';

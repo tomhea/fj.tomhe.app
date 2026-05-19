@@ -129,11 +129,6 @@ export default function IDE() {
   );
   const wsRef = useRef<WebSocket | null>(null);
   const runStartRef = useRef<number>(0);
-  // Line buffers: fj stdout/stderr arrives in arbitrary byte chunks from the
-  // OS pipe. We accumulate until a newline so the terminal never shows a
-  // word split across two separate lines.
-  const stdoutBuf = useRef('');
-  const stderrBuf = useRef('');
   const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const compileAbortRef = useRef<AbortController | null>(null);
   const importAbortRef = useRef<AbortController | null>(null);
@@ -511,31 +506,48 @@ export default function IDE() {
         }
       };
 
-      // Append a chunk to the given line buffer, flushing every complete line
-      // (terminated by \n) immediately. Partial last lines stay buffered until
-      // the next chunk (or process exit) completes them.
-      function feedBuffer(
-        buf: React.MutableRefObject<string>,
-        type: TerminalLine['type'],
-        chunk: string,
-      ) {
-        // Normalise \r\n → \n and bare \r → \n so fj's progress output
-        // doesn't bleed raw \r characters into the terminal display.
-        const normalised = chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        buf.current += normalised;
-        const parts = buf.current.split('\n');
-        // Every element except the last is a complete line.
-        for (let i = 0; i < parts.length - 1; i++) {
-          addLine(type, parts[i]);
-        }
-        buf.current = parts[parts.length - 1];
-      }
+      // Stream a raw chunk into the terminal.
+      // Chunks are appended to the current partial line; a new line is only
+      // started when a \n is encountered — so "Hel" + "lo\n" renders as one
+      // line "Hello", not two separate divs.
+      function streamChunk(type: 'stdout' | 'stderr', chunk: string) {
+        // Normalise \r\n and bare \r so fj's progress/timing output doesn't
+        // bleed raw carriage-returns into the display.
+        const text = chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const parts = text.split('\n');
 
-      function flushBuffer(buf: React.MutableRefObject<string>, type: TerminalLine['type']) {
-        if (buf.current) {
-          addLine(type, buf.current);
-          buf.current = '';
-        }
+        setTerminalLines((prev) => {
+          let lines = [...prev];
+          const last = lines[lines.length - 1];
+
+          // First part: append to existing partial line of the same type,
+          // or start a new partial line.
+          if (last?.partial && last.type === type) {
+            lines[lines.length - 1] = { ...last, text: last.text + parts[0] };
+          } else {
+            lines.push({ type, text: parts[0], id: nextLineId(), partial: true });
+          }
+
+          // Each subsequent part follows a \n: terminate the current line and
+          // open a new partial one (skip adding a trailing empty part so a
+          // final \n doesn't leave a dangling blank line).
+          for (let i = 1; i < parts.length; i++) {
+            lines[lines.length - 1] = { ...lines[lines.length - 1], partial: false };
+            const isTrailing = i === parts.length - 1 && parts[i] === '';
+            if (!isTrailing) {
+              lines.push({ type, text: parts[i], id: nextLineId(), partial: i === parts.length - 1 });
+            }
+          }
+
+          if (lines.length > MAX_TERMINAL_LINES) {
+            const dropped = lines.length - MAX_TERMINAL_LINES;
+            return [
+              { type: 'info' as const, text: `… ${dropped} earlier line${dropped === 1 ? '' : 's'} truncated`, id: nextLineId() },
+              ...lines.slice(-MAX_TERMINAL_LINES + 1),
+            ];
+          }
+          return lines;
+        });
       }
 
       ws.onmessage = (event) => {
@@ -543,19 +555,21 @@ export default function IDE() {
         switch (msg.type) {
           case 'started':
             runStartRef.current = Date.now();
-            stdoutBuf.current = '';
-            stderrBuf.current = '';
             break;
           case 'stdout':
-            feedBuffer(stdoutBuf, 'stdout', msg.data);
+            streamChunk('stdout', msg.data);
             break;
           case 'stderr':
-            feedBuffer(stderrBuf, 'stderr', msg.data);
+            streamChunk('stderr', msg.data);
             break;
           case 'exit': {
-            // Flush any unterminated last line (program that doesn't end with \n)
-            flushBuffer(stdoutBuf, 'stdout');
-            flushBuffer(stderrBuf, 'stderr');
+            // Terminate any still-partial lines left by a program that didn't
+            // end its output with \n.
+            setTerminalLines((prev) =>
+              prev[prev.length - 1]?.partial
+                ? [...prev.slice(0, -1), { ...prev[prev.length - 1], partial: false }]
+                : prev,
+            );
             const elapsed = ((Date.now() - runStartRef.current) / 1000).toFixed(2);
             addLine(
               'info',
