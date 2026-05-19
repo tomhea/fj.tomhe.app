@@ -1,11 +1,11 @@
 import type { Config } from 'tailwindcss';
 
 // We use Tailwind purely for utility layout/spacing classes (`flex`, `gap`,
-// `truncate`, etc.). The IDE palette is intentionally hex-coded inline in
-// the components matching VS Code's "Dark+" so what-you-see-in-source is
-// what-you-see-on-screen. If a runtime-switchable theme ever lands, the
-// cleanest migration is to emit CSS custom properties on `:root` in
-// globals.css and swap the inline literals for `var(--ide-bg)` etc.
+// `truncate`, etc.). The IDE palette lives as CSS custom properties on
+// `:root` in `app/globals.css` (search for `--ide-bg` etc.), which is the
+// single source of truth. New code should reference those via
+// `style={{ background: 'var(--ide-bg)' }}` rather than inline hex; older
+// components still use hex for now and can migrate incrementally.
 const config: Config = {
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
