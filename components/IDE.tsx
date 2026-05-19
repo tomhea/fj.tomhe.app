@@ -127,9 +127,23 @@ export default function IDE() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => loadFromLocalStorage<boolean>('fj-ide-sidebar-collapsed') ?? false,
   );
-  // Mobile tab: 'editor' shows the code editor, 'terminal' shows the output.
-  // Auto-switches to 'terminal' when a run starts so the user sees output.
-  const [mobileTab, setMobileTab] = useState<'editor' | 'terminal'>('editor');
+  // Mobile tab: which panel is active on narrow screens.
+  // 'files'    → full-width file tree drawer
+  // 'editor'   → code editor
+  // 'terminal' → terminal output
+  const [mobileTab, setMobileTab] = useState<'files' | 'editor' | 'terminal'>('editor');
+
+  // True when the viewport is below Tailwind's md breakpoint (768 px).
+  // Used to gate fillHeight and force-expand the file tree drawer.
+  const [isMobileView, setIsMobileView] = useState<boolean>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobileView(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const wsRef = useRef<WebSocket | null>(null);
   const runStartRef = useRef<number>(0);
   const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -646,6 +660,12 @@ export default function IDE() {
 
   const isRunning = runStatus === 'running';
 
+  // On mobile, 'Hide Explorer' button exits back to editor.
+  const handleToggleSidebar = () => {
+    if (isMobileView) setMobileTab('editor');
+    else setSidebarCollapsed((c) => !c);
+  };
+
   return (
     // .ide-root applies 100dvh (with 100vh fallback) and safe-area padding.
     <div
@@ -676,32 +696,48 @@ export default function IDE() {
 
       {/* ── Main content area ─────────────────────────────────────────── */}
       <main className="flex flex-1 min-h-0">
-        {/* File tree — always present but starts hidden on mobile */}
-        <FileTree
-          files={files}
-          activeFileId={activeFileId}
-          sources={sources}
-          activeSourceIdx={activeSourceIdx}
-          // On mobile the sidebar is always collapsed; the toggle in the
-          // FileTree header still lets the user expand it for a moment.
-          collapsed={sidebarCollapsed}
-          onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
-          onSelectFile={(id) => { selectFile(id); setMobileTab('editor'); }}
-          onSelectSource={(idx) => { selectSource(idx); setMobileTab('editor'); }}
-          onCreateFile={createFile}
-          onRenameFile={renameFile}
-          onDeleteFile={deleteFile}
-        />
 
-        <div className="flex flex-col flex-1 min-w-0 min-h-0">
+        {/* ── File tree ─────────────────────────────────────────────────
+            Desktop (md+): always visible as a fixed-width sidebar.
+            Mobile: only visible when the 'files' tab is active, fills
+            the entire main area at full width.                        */}
+        <div className={
+          mobileTab === 'files'
+            ? 'flex flex-col flex-1 min-h-0 md:flex md:flex-none md:flex-col'
+            : 'hidden md:flex md:flex-none md:flex-col'
+        }>
+          <FileTree
+            files={files}
+            activeFileId={activeFileId}
+            sources={sources}
+            activeSourceIdx={activeSourceIdx}
+            collapsed={isMobileView ? false : sidebarCollapsed}
+            onToggleCollapsed={handleToggleSidebar}
+            fullWidth={isMobileView}
+            onSelectFile={(id) => { selectFile(id); setMobileTab('editor'); }}
+            onSelectSource={(idx) => { selectSource(idx); setMobileTab('editor'); }}
+            onCreateFile={createFile}
+            onRenameFile={renameFile}
+            onDeleteFile={deleteFile}
+          />
+        </div>
+
+        {/* ── Editor + Terminal column ───────────────────────────────────
+            Desktop (md+): always visible, fills remaining width.
+            Mobile: hidden while the files tab is showing.            */}
+        <div className={
+          mobileTab === 'files'
+            ? 'hidden md:flex md:flex-col md:flex-1 md:min-w-0 md:min-h-0'
+            : 'flex flex-col flex-1 min-w-0 min-h-0'
+        }>
           {/* Editor panel
-              Desktop (md+): always visible, fills remaining space.
-              Mobile: only visible when editor tab is active, fills all space. */}
-          <div className={[
-            'flex flex-col min-h-0',
-            mobileTab === 'editor' ? 'flex-1' : 'hidden',
-            'md:flex md:flex-1',
-          ].join(' ')}>
+              Desktop: always flex-1 (fills above the terminal).
+              Mobile: only shown for the editor tab.                  */}
+          <div className={
+            mobileTab === 'editor'
+              ? 'flex flex-col flex-1 min-h-0 md:flex md:flex-col md:flex-1 md:min-h-0'
+              : 'hidden md:flex md:flex-col md:flex-1 md:min-h-0'
+          }>
             <CodeEditor
               file={viewFile}
               onChange={(content) => {
@@ -716,13 +752,13 @@ export default function IDE() {
           </div>
 
           {/* Terminal panel
-              Desktop (md+): always visible at its own managed height.
-              Mobile: only visible when terminal tab is active, fills all space. */}
-          <div className={[
-            'flex flex-col min-h-0',
-            mobileTab === 'terminal' ? 'flex-1' : 'hidden',
-            'md:flex md:flex-none',
-          ].join(' ')}>
+              Desktop: always shown at its own managed height (flex-none).
+              Mobile: only shown for the terminal tab, fills all space.  */}
+          <div className={
+            mobileTab === 'terminal'
+              ? 'flex flex-col flex-1 min-h-0 md:flex md:flex-none md:flex-col md:min-h-0'
+              : 'hidden md:flex md:flex-none md:flex-col md:min-h-0'
+          }>
             <Terminal
               lines={terminalLines}
               runStatus={runStatus}
@@ -731,7 +767,7 @@ export default function IDE() {
               onKill={killProcess}
               stdinContent={stdinContent}
               onStdinContentChange={setStdinContent}
-              fillHeight={mobileTab === 'terminal'}
+              fillHeight={isMobileView && mobileTab === 'terminal'}
             />
           </div>
         </div>
@@ -743,6 +779,12 @@ export default function IDE() {
         style={{ background: '#252526', borderColor: '#3c3c3c' }}
         aria-label="Panel switcher"
       >
+        <MobileTabBtn
+          active={mobileTab === 'files'}
+          onClick={() => setMobileTab('files')}
+          icon={<FilesIcon />}
+          label="Files"
+        />
         <MobileTabBtn
           active={mobileTab === 'editor'}
           onClick={() => setMobileTab('editor')}
@@ -801,6 +843,16 @@ function MobileTabBtn({
         />
       )}
     </button>
+  );
+}
+
+function FilesIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M3 2h6l3 3v9H3V2z" strokeLinejoin="round" />
+      <path d="M9 2v3h3" />
+      <path d="M6 7h4M6 10h3" strokeLinecap="round" />
+    </svg>
   );
 }
 

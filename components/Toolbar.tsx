@@ -158,15 +158,12 @@ export default function Toolbar({
 
   return (
     <div
-      className="flex items-center gap-1 px-3 py-1 shrink-0 select-none relative overflow-x-auto"
+      className="flex items-center gap-1 px-3 py-1 shrink-0 select-none relative overflow-x-auto h-12 md:h-10"
       style={{
         background: '#323233',
         borderBottom: '1px solid #3c3c3c',
-        height: 48, // 48px on mobile gives a more comfortable touch target height
-        // Smooth momentum scrolling on iOS
-        WebkitOverflowScrolling: 'touch',
-        // Allow horizontal swipe to scroll toolbar without interfering with
-        // vertical page scroll (not that the page scrolls, but good practice)
+        // pan-x lets the user swipe the toolbar horizontally on touch without
+        // the gesture being swallowed by any parent scroll container.
         touchAction: 'pan-x',
       }}
     >
