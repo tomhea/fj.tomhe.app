@@ -22,7 +22,7 @@ import {
 // Each test gets up to 30 s — the tsx bootstrap and Next.js dev compile
 // are slow, and the kill-mid-run test deliberately sleeps for a while.
 const TEST_TIMEOUT = 30_000;
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { spawn, ChildProcessWithoutNullStreams, execSync } from 'child_process';
 import { request as httpRequest } from 'http';
 import WebSocket from 'ws';
 import { join } from 'path';
@@ -186,7 +186,14 @@ const HELLO_FJ = [
   '',
 ].join('\n');
 
-const fjAvailable = !process.env.SKIP_FJ_TESTS;
+const fjAvailable = (() => {
+  try {
+    execSync(`${process.env.FJ_CMD ?? 'fj'} --help`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 describe('WS runner', () => {
   describe('upgrade-path security', () => {
