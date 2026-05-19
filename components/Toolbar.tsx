@@ -94,7 +94,7 @@ export default function Toolbar({
 
   return (
     <div
-      className="flex items-center gap-1 px-3 py-1 shrink-0 select-none relative"
+      className="flex items-center gap-1 px-3 py-1 shrink-0 select-none relative overflow-x-auto"
       style={{ background: '#323233', borderBottom: '1px solid #3c3c3c', height: 40 }}
     >
       {/* Logo */}
