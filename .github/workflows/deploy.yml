@@ -44,7 +44,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /var/www/fj/
-            source .venv/bin/activate
+            source /root/.venv/bin/activate
             npm config set legacy-peer-deps true
             npm ci --omit=dev
             sudo systemctl restart fj
