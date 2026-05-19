@@ -46,7 +46,7 @@ const CSP = [
   `style-src 'self' 'unsafe-inline' ${MONACO_CDN}`,
   "img-src 'self' data: blob:",
   `font-src 'self' data: ${MONACO_CDN}`,
-  `connect-src 'self' ws: wss: ${MONACO_CDN} ${ALLOWED_CONNECT}`.trim(),
+  `connect-src 'self' ws: wss: ${MONACO_CDN} https://spoo.me ${ALLOWED_CONNECT}`.trim(),
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",
