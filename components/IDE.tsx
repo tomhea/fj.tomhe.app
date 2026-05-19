@@ -616,7 +616,6 @@ export default function IDE() {
         setRunStatus((s) => (s === 'running' ? 'exited' : s));
         wsRef.current = null;
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [runStatus, compiledFjm, files, stdinContent, clearTerminal, addLine],
   );
@@ -634,6 +633,7 @@ export default function IDE() {
   // On mobile, automatically reveal the terminal tab when a run starts so the
   // user doesn't have to manually switch to see output.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (runStatus === 'running') setMobileTab('terminal');
   }, [runStatus]);
 
@@ -644,6 +644,7 @@ export default function IDE() {
     if (typeof window === 'undefined') return;
     if (!localStorage.getItem('fj-visited')) {
       localStorage.setItem('fj-visited', '1');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       addLine('info', '👋  Click "Run FJ" in the toolbar to try the sample program.');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
