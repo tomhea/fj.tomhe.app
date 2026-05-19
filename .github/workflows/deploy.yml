@@ -31,30 +31,24 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           mkdir -p ~/.ssh
-          # printf with single-quoted SSH_KEY avoids any chance of shell
-          # parsing the secret value.
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1
+          # Test SSH connection
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$SSH_USER@$SSH_HOST" 'echo "SSH connection successful"'
 
       - name: Deploy via rsync
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          # Preserve server-side state that should survive deploys:
-          #   .env.local      — secrets and per-host config
-          #   node_modules/   — installed server-side (npm ci on the host)
-          #   .next/cache     — next.js build cache
-          # We rsync the working tree (source + built .next/) and let the
-          # server run `npm ci --omit=dev && systemctl restart fj` post-rsync.
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='node_modules' \
             --exclude='.env.local' \
             --exclude='.next/cache' \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=60" \
             ./ "$SSH_USER@$SSH_HOST:/var/www/fj/"
 
       - name: Reinstall + restart service on host
