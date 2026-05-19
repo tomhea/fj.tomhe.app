@@ -15,7 +15,8 @@ updates:
     labels:
       - dependencies
     ignore:
-      # Monaco editor has breaking changes between minor versions — pin manually
+      # Monaco editor can have breaking API changes between minor versions —
+      # review manually before upgrading.
       - dependency-name: '@monaco-editor/react'
         update-types:
           - version-update:semver-major
