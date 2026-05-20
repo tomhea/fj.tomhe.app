@@ -2,7 +2,6 @@
 
 import { useRef, useState, useEffect, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
 import { CompileStatus, RunStatus } from '@/lib/types';
 import { EXAMPLES, Example } from '@/lib/examples';
 
@@ -340,16 +339,6 @@ export default function Toolbar({
       <ToolBtn onClick={onOpenDocs} title="Open language reference and STL viewer">
         <BookIcon /> Docs
       </ToolBtn>
-
-      {/* Learn */}
-      <Link
-        href="/learn"
-        className="flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0"
-        style={{ color: '#4ec9b0', textDecoration: 'none', whiteSpace: 'nowrap', minHeight: 36 }}
-        title="Open web development tutorial"
-      >
-        <GraduationIcon /> Learn
-      </Link>
     </div>
   );
 }
@@ -499,15 +488,6 @@ function BookIcon() {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#cccccc" strokeWidth="1.5">
       <path d="M3 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
       <path d="M8 2v12" />
-    </svg>
-  );
-}
-
-function GraduationIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M8 3L1 7l7 4 7-4-7-4z" />
-      <path d="M4 9v3c0 1 2 2 4 2s4-1 4-2V9" />
     </svg>
   );
 }
