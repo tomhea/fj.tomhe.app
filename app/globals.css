@@ -100,6 +100,49 @@ html, body {
   line-height: 1.5;
 }
 
+/* Tutorial prose typography */
+.tutorial-prose p {
+  margin: 0 0 14px;
+  color: #cccccc;
+}
+
+.tutorial-prose h2 {
+  margin: 32px 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #569cd6;
+}
+
+.tutorial-prose ul, .tutorial-prose ol {
+  margin: 0 0 16px;
+  padding-left: 24px;
+}
+
+.tutorial-prose li {
+  margin-bottom: 6px;
+  color: #cccccc;
+}
+
+.tutorial-prose code {
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #ce9178;
+}
+
+.tutorial-prose strong {
+  color: #e8c47a;
+  font-weight: 600;
+}
+
+.tutorial-prose em {
+  color: #9cdcfe;
+  font-style: italic;
+}
+
 /* Visually hidden but accessible to screen readers */
 .sr-only {
   position: absolute;
