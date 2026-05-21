@@ -64,7 +64,7 @@ describe('Terminal', () => {
 
   it('enables stdin input when running', () => {
     render(<Terminal {...BASE_PROPS} runStatus="running" />);
-    const input = screen.getByPlaceholderText(/Type stdin input/i);
+    const input = screen.getByPlaceholderText(/Type stdin and press Enter/i);
     expect(input).not.toBeDisabled();
   });
 
@@ -92,7 +92,8 @@ describe('Terminal', () => {
   });
 
   it('shows the Pre-set Stdin tab and renders stdinContent in the textarea', () => {
-    render(<Terminal {...BASE_PROPS} stdinContent="line1\nline2" />);
+    // Use a JS expression (not a JSX string literal) so \n is a real newline.
+    render(<Terminal {...BASE_PROPS} stdinContent={'line1\nline2'} />);
     fireEvent.click(screen.getByText('Pre-set Stdin'));
     const textarea = screen.getByPlaceholderText(/Enter stdin content/i) as HTMLTextAreaElement;
     expect(textarea.value).toBe('line1\nline2');
