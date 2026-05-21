@@ -100,6 +100,56 @@ html, body {
   line-height: 1.5;
 }
 
+/* Markdown rendered in the STL README viewer */
+.stl-markdown h1, .stl-markdown h2, .stl-markdown h3,
+.stl-markdown h4, .stl-markdown h5, .stl-markdown h6 {
+  color: #e8c47a;
+  font-weight: 600;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
+}
+.stl-markdown h1 { font-size: 1.3em; }
+.stl-markdown h2 { font-size: 1.1em; }
+.stl-markdown h3 { font-size: 1em; }
+.stl-markdown p  { margin: 0.5em 0; }
+.stl-markdown code {
+  background: #2d2d2d;
+  color: #9cdcfe;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+}
+.stl-markdown pre {
+  background: #252526;
+  border-radius: 4px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.stl-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: #d4d4d4;
+}
+.stl-markdown a { color: #569cd6; text-decoration: underline; }
+.stl-markdown ul, .stl-markdown ol { padding-left: 1.5em; margin: 0.5em 0; }
+.stl-markdown li { margin: 0.25em 0; }
+.stl-markdown hr { border-color: #3c3c3c; margin: 1em 0; }
+.stl-markdown blockquote {
+  border-left: 3px solid #3c3c3c;
+  padding-left: 1em;
+  color: #9e9e9e;
+  margin: 0.5em 0;
+}
+.stl-markdown table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+.stl-markdown th, .stl-markdown td {
+  border: 1px solid #3c3c3c;
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.stl-markdown th { background: #2d2d2d; }
+
 /* Visually hidden but accessible to screen readers */
 .sr-only {
   position: absolute;

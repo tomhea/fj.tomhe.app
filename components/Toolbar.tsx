@@ -11,6 +11,8 @@ interface ToolbarProps {
   compiledFjm: string | null;
   onCompile: () => void;
   onDownloadFjm: () => void;
+  /** Download all FJ files as a project (single .fj or .zip). */
+  onDownloadFjProject: () => void;
   onRunFj: () => void;
   onRunFjm: () => void;
   onKill: () => void;
@@ -28,7 +30,7 @@ interface ToolbarProps {
 
 export default function Toolbar({
   compileStatus, runStatus, compiledFjm,
-  onCompile, onDownloadFjm, onRunFj, onRunFjm, onKill,
+  onCompile, onDownloadFjm, onDownloadFjProject, onRunFj, onRunFjm, onKill,
   onImportBf, onImportC, onImportFj, onImportFjm,
   onLoadExample, onCopyLink, onOpenDocs,
   c2fjOutput, onRunC2fjSource,
@@ -39,6 +41,8 @@ export default function Toolbar({
   const fjmInputRef = useRef<HTMLInputElement>(null);
   const examplesBtnRef = useRef<HTMLButtonElement>(null);
   const shortBtnRef = useRef<HTMLButtonElement>(null);
+  const c2fjBtnRef = useRef<HTMLButtonElement>(null);
+  const runC2fjBtnRef = useRef<HTMLButtonElement>(null);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -47,6 +51,10 @@ export default function Toolbar({
   const [shortUrl, setShortUrl] = useState('');
   const [shortTooltipPos, setShortTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tooltip shown below C→FJ after conversion completes: "Now press Run C→FJ output"
+  const [c2fjTipPos, setC2fjTipPos] = useState<{ top: number; left: number } | null>(null);
+  // Tooltip shown below Run C→FJ output: "For more, search 'c2fj' in Docs"
+  const [runC2fjTipPos, setRunC2fjTipPos] = useState<{ top: number; left: number } | null>(null);
 
   // Recompute dropdown position whenever it opens or the window resizes/scrolls.
   useEffect(() => {
@@ -72,15 +80,6 @@ export default function Toolbar({
     if (!file) return;
     const content = await file.text();
     onImportBf(content, file.name);
-    e.target.value = '';
-  }
-
-  function handleCUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    onImportC(fd);
     e.target.value = '';
   }
 
@@ -119,6 +118,29 @@ export default function Toolbar({
     onCopyLink();
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
+  }
+
+  function handleImportC(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    onImportC(fd);
+    e.target.value = '';
+    // Show tooltip pointing users to the Run C→FJ output button
+    const rect = c2fjBtnRef.current?.getBoundingClientRect();
+    if (rect) setC2fjTipPos({ top: rect.bottom + 6, left: rect.left });
+    setTimeout(() => setC2fjTipPos(null), 5000);
+  }
+
+  function handleRunC2fjSource() {
+    onRunC2fjSource();
+    // Dismiss the c2fj tip if still showing
+    setC2fjTipPos(null);
+    // Show tip for "Run C→FJ output"
+    const rect = runC2fjBtnRef.current?.getBoundingClientRect();
+    if (rect) setRunC2fjTipPos({ top: rect.bottom + 6, left: rect.left });
+    setTimeout(() => setRunC2fjTipPos(null), 5000);
   }
 
   async function handleShortLink() {
@@ -173,7 +195,7 @@ export default function Toolbar({
     >
       {/* Logo */}
       <span className="font-bold text-sm mr-3" style={{ color: '#e8c47a', letterSpacing: 1 }}>
-        FlipJump
+        FlipJump IDE
       </span>
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
@@ -237,6 +259,11 @@ export default function Toolbar({
       {/* Download FJM */}
       <ToolBtn onClick={onDownloadFjm} disabled={isCompiling} title="Compile and download .fjm binary">
         <DownloadIcon color={compiledFjm ? '#4ec9b0' : '#cccccc'} /> Download FJM
+      </ToolBtn>
+
+      {/* Download FJ Project */}
+      <ToolBtn onClick={onDownloadFjProject} title="Download FJ source files (single .fj or .zip for multi-file projects)">
+        <DownloadIcon color="#cccccc" /> Download FJ
       </ToolBtn>
 
       {/* Upload FJM */}
@@ -318,19 +345,58 @@ export default function Toolbar({
       </ToolBtn>
 
       {/* C import */}
-      <input ref={cInputRef} type="file" accept=".c,.cpp,.zip" className="hidden" onChange={handleCUpload} />
-      <ToolBtn onClick={() => cInputRef.current?.click()} title="Import C project (.c, .cpp, or .zip) → compile to FJ">
+      <input ref={cInputRef} type="file" accept=".c,.cpp,.zip" className="hidden" onChange={handleImportC} />
+      <ToolBtn ref={c2fjBtnRef} onClick={() => cInputRef.current?.click()} title="Import C project (.c, .cpp, or .zip) → compile to FJ">
         <CIcon /> C → FJ
       </ToolBtn>
 
-      {/* Run C Output — only shown when a c2fj result is ready */}
+      {/* Run C→FJ output — only shown when a c2fj result is ready */}
       {c2fjOutput && !isRunning && (
         <ToolBtn
-          onClick={onRunC2fjSource}
+          ref={runC2fjBtnRef}
+          onClick={handleRunC2fjSource}
           title="Run the compiled C→FJ output directly (bypasses editor)"
         >
-          <PlayIcon color="#5aa4e8" /> Run C Output
+          <PlayIcon color="#5aa4e8" /> Run C→FJ output
         </ToolBtn>
+      )}
+
+      {/* C→FJ tip tooltip */}
+      {c2fjTipPos && createPortal(
+        <div
+          className="fixed text-xs rounded px-2 py-1 shadow-lg pointer-events-none"
+          style={{
+            top: c2fjTipPos.top,
+            left: c2fjTipPos.left,
+            background: '#1e1e1e',
+            border: '1px solid #454545',
+            color: '#e8c47a',
+            whiteSpace: 'nowrap',
+            zIndex: 60,
+          }}
+        >
+          ✓ Ready — now press &ldquo;Run C→FJ output&rdquo;
+        </div>,
+        document.body,
+      )}
+
+      {/* Run C→FJ output tip tooltip */}
+      {runC2fjTipPos && createPortal(
+        <div
+          className="fixed text-xs rounded px-2 py-1 shadow-lg pointer-events-none"
+          style={{
+            top: runC2fjTipPos.top,
+            left: runC2fjTipPos.left,
+            background: '#1e1e1e',
+            border: '1px solid #454545',
+            color: '#e8c47a',
+            whiteSpace: 'nowrap',
+            zIndex: 60,
+          }}
+        >
+          💡 For more, search &ldquo;c2fj&rdquo; in the Docs/STL tab
+        </div>,
+        document.body,
       )}
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />

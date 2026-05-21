@@ -17,6 +17,11 @@ export const EXAMPLES: Example[] = [
 // stl.output writes a constant string of bytes to stdout.
 // stl.loop halts the program by jumping to itself forever.
 
+// Ctrl+Click on a macro (such as "output"), to see its implementation.
+
+// View more examples in the Examples menu above.
+
+
 stl.startup
 stl.output "Hello, World!\\n(:"
 stl.loop
@@ -241,6 +246,116 @@ print_int:
     stl.output '\\n'
     stl.fret ret_reg
     val: bit.vec w
+`,
+      },
+    ],
+  },
+
+  // ── 9. Prime Sieve ────────────────────────────────────────────────────────
+  {
+    name: 'Prime Sieve',
+    description: 'Find primes up to 30 with trial division — loops, comparison, and division.',
+    files: [
+      {
+        name: 'prime_sieve.fj',
+        content: `// Print all prime numbers from 2 to 30 using trial division.
+//
+// For each candidate n in [2, LIMIT]:
+//   For each divisor d in [2, n-1]:
+//     if n mod d == 0 → composite, skip to next n
+//   If no divisor found → prime, print n
+//
+// Uses bit.idiv_loop to compute the remainder of n/d.
+// Expected output: 2 3 5 7 11 13 17 19 23 29
+
+LIMIT = 30
+
+stl.startup
+
+n_loop:
+    // if n > LIMIT → done
+    bit.cmp w, n, limit_val, print_newline, print_newline, check_n_prime
+check_n_prime:
+    // Reset: d = 2
+    bit.mov w, d, two
+
+    d_loop:
+        // if d >= n → n is prime
+        bit.cmp w, d, n, n_is_prime, n_is_prime, test_divisor
+    test_divisor:
+        // tmp_n = n  (idiv_loop destroys its first argument)
+        bit.mov w, tmp_n, n
+        bit.idiv_loop w, tmp_n, d, quot, rem
+        // if rem == 0 → composite
+        bit.if0 w, rem, n_is_composite
+        // d += 1, continue inner loop
+        bit.add w, d, one
+        ;d_loop
+
+    n_is_prime:
+        bit.print_dec_int w, n
+        stl.output_char ' '
+        ;n_next
+    n_is_composite:
+        ;n_next
+    n_next:
+        bit.add w, n, one
+        ;n_loop
+
+print_newline:
+    stl.output_char '\\n'
+    stl.loop
+
+// Variables
+n:          bit.vec w, 2      // current candidate (starts at 2)
+d:          bit.vec w, 0
+tmp_n:      bit.vec w, 0
+quot:       bit.vec w, 0
+rem:        bit.vec w, 0
+two:        bit.vec w, 2
+limit_val:  bit.vec w, LIMIT
+`,
+      },
+    ],
+  },
+
+  // ── 10. Multi-file Compilation ────────────────────────────────────────────
+  {
+    name: 'Multi-file Compilation',
+    description: 'Two-file project: a library defines a macro used by the main file.',
+    files: [
+      {
+        name: 'greet.fj',
+        content: `// greet.fj — a tiny library that defines the greet macro.
+//
+// This file is compiled BEFORE main.fj (it is listed first in the Explorer).
+// main.fj can therefore call greet because it is defined in an earlier file.
+
+ns mylib {
+    def greet name_str {
+        stl.output "Hello, "
+        stl.output name_str
+        stl.output "!\\n"
+    }
+}
+`,
+      },
+      {
+        name: 'main.fj',
+        content: `// main.fj — entry point; uses mylib.greet from greet.fj.
+//
+// Multi-file compilation: all .fj files are assembled together in the order
+// shown in the Explorer sidebar.  Macros in earlier files are available here.
+//
+// Try dragging greet.fj below main.fj — the compile will fail because
+// mylib.greet is no longer defined before it is called.
+
+stl.startup
+
+mylib.greet "World"
+mylib.greet "FlipJump"
+
+stl.loop
 `,
       },
     ],

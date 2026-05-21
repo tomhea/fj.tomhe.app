@@ -13,9 +13,31 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
+const SITE_URL = 'https://fj.tomhe.app';
+
 export const metadata: Metadata = {
-  title: 'FlipJump Interpreter',
-  description: 'Online IDE for the FlipJump esoteric programming language — write, compile, and run FJ programs in your browser.',
+  title: 'FlipJump IDE',
+  description:
+    'Online IDE for the FlipJump esoteric programming language — write, compile, and run FJ programs directly in your browser. Includes a built-in standard-library viewer, multi-file projects, BF→FJ and C→FJ converters, and shareable links.',
+  keywords: [
+    'FlipJump', 'flip-jump', 'FJ', 'esoteric programming', 'esolang',
+    'online IDE', 'compiler', 'WebAssembly', 'bit manipulation',
+  ],
+  metadataBase: new URL(SITE_URL),
+  alternates: { canonical: SITE_URL },
+  openGraph: {
+    type: 'website',
+    url: SITE_URL,
+    title: 'FlipJump IDE',
+    description:
+      'Write, compile, and run FlipJump programs in your browser. The single-instruction esoteric language with a rich standard library.',
+    siteName: 'FlipJump IDE',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'FlipJump IDE',
+    description: 'Write, compile, and run FlipJump programs in your browser.',
+  },
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: '32x32' },
