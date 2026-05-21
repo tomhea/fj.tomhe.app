@@ -35,7 +35,7 @@ jobs:
       - name: Install flipjump (provides fj; bf2fj is optional)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install flipjump
+          python -m pip install -r requirements.txt
           # `fj` is the only required tool; bf2fj-dependent tests auto-skip
           # when it isn't on PATH (some pip versions ship only `fj`).
           fj --help > /dev/null
@@ -80,7 +80,7 @@ jobs:
       - name: Install flipjump (for the dev server's fj invocation)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install flipjump
+          python -m pip install -r requirements.txt
           fj --help > /dev/null
 
       - name: Install npm deps
