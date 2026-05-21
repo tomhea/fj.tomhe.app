@@ -14,6 +14,7 @@ function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
     compiledFjm: null,
     onCompile: vi.fn(),
     onDownloadFjm: vi.fn(),
+    onDownloadFjProject: vi.fn(),
     onRunFj: vi.fn(),
     onRunFjm: vi.fn(),
     onKill: vi.fn(),
@@ -31,9 +32,9 @@ function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
 }
 
 describe('Toolbar', () => {
-  it('renders the FlipJump logo', () => {
+  it('renders the FlipJump IDE logo', () => {
     render(<Toolbar {...makeProps()} />);
-    expect(screen.getByText('FlipJump')).toBeInTheDocument();
+    expect(screen.getByText('FlipJump IDE')).toBeInTheDocument();
   });
 
   it('calls onCompile when Compile is clicked', () => {

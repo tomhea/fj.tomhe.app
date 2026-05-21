@@ -108,13 +108,13 @@ describe('FileTree', () => {
     expect(onDeleteFile).toHaveBeenCalledWith('2');
   });
 
-  it('does not call onDeleteFile when deleting the only remaining file', () => {
+  it('calls onDeleteFile even when deleting the only remaining file (IDE will create untitled.fj)', () => {
     const onDeleteFile = vi.fn();
     const files = [makeFile('1', 'main.fj')];
     render(<FileTree {...makeProps(files, '1', { onDeleteFile })} />);
     fireEvent.contextMenu(screen.getByText('main.fj'));
     fireEvent.click(screen.getByText('Delete'));
-    expect(onDeleteFile).not.toHaveBeenCalled();
+    expect(onDeleteFile).toHaveBeenCalledWith('1');
   });
 
   it('renders a narrow strip when collapsed=true', () => {

@@ -13,6 +13,8 @@ interface CodeEditorProps {
   markers?: MonacoMarker[];
   readOnly?: boolean;
   overrideLanguage?: string;
+  /** Called when the user Ctrl+clicks a word — fires with the clicked word. */
+  onCtrlClick?: (word: string) => void;
 }
 
 type MonacoInstance = Parameters<OnMount>[1];
@@ -26,14 +28,29 @@ function languageForFile(name: string, override?: string): string {
   return 'plaintext';
 }
 
-export default function CodeEditor({ file, onChange, markers, readOnly, overrideLanguage }: CodeEditorProps) {
+export default function CodeEditor({ file, onChange, markers, readOnly, overrideLanguage, onCtrlClick }: CodeEditorProps) {
   const monacoRef = useRef<MonacoInstance | null>(null);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const onCtrlClickRef = useRef(onCtrlClick);
+  onCtrlClickRef.current = onCtrlClick;
 
   const handleMount: OnMount = (editor, monaco) => {
     monacoRef.current = monaco;
     editorRef.current = editor;
     registerLanguages(monaco);
+
+    // Ctrl+click fires onCtrlClick with the word under the cursor.
+    editor.onMouseDown((e) => {
+      if (!e.event.ctrlKey && !e.event.metaKey) return;
+      const pos = e.target.position;
+      if (!pos) return;
+      const model = editor.getModel();
+      if (!model) return;
+      const wordInfo = model.getWordAtPosition(pos);
+      if (wordInfo?.word) {
+        onCtrlClickRef.current?.(wordInfo.word);
+      }
+    });
   };
 
   useEffect(() => {
@@ -143,6 +160,12 @@ function registerFlipJumpLanguage(monaco: MonacoInstance) {
         // Constants: identifier immediately before '='  (strict: no dots)
         [/[A-Za-z_]\w*(?=\s*=)/, 'variable.constant'],
 
+        // Macro calls: a dotted identifier (namespace.name) followed by whitespace + a non-; arg.
+        // Requiring at least one dot ensures keywords (def, ns, rep — all dot-free) are
+        // NOT matched here and fall through to the keyword/type/directive cases below.
+        // Examples matched: stl.output, bit.add, bit.cmp, hex.mul, mylib.greet
+        [/[A-Za-z_]\w*(?:\.\w+)+(?=[ \t]+[^;\s\/])/, 'macro.call'],
+
         // Identifiers: keywords, types, directives, or plain identifiers (allow dots for namespaces)
         [/[A-Za-z_][\w.]*/, {
           cases: {
@@ -193,6 +216,7 @@ function registerFlipJumpLanguage(monaco: MonacoInstance) {
       { token: 'keyword.control',      foreground: 'e07b39' },                     // pad reserve segment wflip ;
       { token: 'entity.name.function', foreground: '56c8c8' },                     // macro name after def
       { token: 'variable.constant',    foreground: 'c792ea' },                     // constant LHS (name = value)
+      { token: 'macro.call',           foreground: 'e8c47a' },                     // macro invocation (identifier before args)
       { token: 'number',               foreground: 'b5cea8' },
       { token: 'number.hex',           foreground: 'b5cea8' },
       { token: 'string',               foreground: 'ce9178' },

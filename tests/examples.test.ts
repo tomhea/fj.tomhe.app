@@ -3,10 +3,12 @@ import { EXAMPLES } from '@/lib/examples';
 import { isSafeFilename } from '@/lib/safe-filename';
 
 describe('EXAMPLES catalog', () => {
-  it('contains Hello World and at least 8 entries', () => {
+  it('contains Hello World and at least 10 entries', () => {
     const names = EXAMPLES.map((e) => e.name);
     expect(names).toContain('Hello World');
-    expect(names.length).toBeGreaterThanOrEqual(8);
+    expect(names).toContain('Prime Sieve');
+    expect(names).toContain('Multi-file Compilation');
+    expect(names.length).toBeGreaterThanOrEqual(10);
   });
 
   it.each(EXAMPLES.map((ex) => [ex.name, ex] as const))(
@@ -54,5 +56,27 @@ describe('EXAMPLES catalog', () => {
     expect(src).toMatch(/\bbit\.add\b/);
     expect(src).toMatch(/\bbit\.sub\b/);
     expect(src).toMatch(/\bstl\.loop\b/);
+  });
+
+  it('Prime Sieve example uses trial division and prints primes', () => {
+    const ex = EXAMPLES.find((e) => e.name === 'Prime Sieve')!;
+    expect(ex.files.length).toBe(1);
+    const src = ex.files[0].content;
+    expect(src).toMatch(/\bstl\.startup\b/);
+    expect(src).toMatch(/\bbit\.idiv_loop\b/);
+    expect(src).toMatch(/\bbit\.print_dec_int\b/);
+    expect(src).toMatch(/\bstl\.loop\b/);
+  });
+
+  it('Multi-file Compilation example spans two files with a library and entry point', () => {
+    const ex = EXAMPLES.find((e) => e.name === 'Multi-file Compilation')!;
+    expect(ex.files.length).toBe(2);
+    expect(ex.files[0].name).toBe('greet.fj');
+    expect(ex.files[1].name).toBe('main.fj');
+    const lib = ex.files[0].content;
+    const main = ex.files[1].content;
+    expect(lib).toMatch(/\bdef\b/);
+    expect(main).toMatch(/\bstl\.startup\b/);
+    expect(main).toMatch(/mylib\.greet/);
   });
 });

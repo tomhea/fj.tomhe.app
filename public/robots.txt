@@ -1,0 +1,17 @@
+# robots.txt for fj.tomhe.app
+#
+# FlipJump IDE — an online IDE for the FlipJump esoteric programming language.
+# Users write, compile, and run FlipJump (.fj) programs in the browser.
+# The /api endpoints are live execution endpoints that compile and run FJ code;
+# crawling them wastes server resources and produces no useful content.
+#
+# --- AI / LLM training crawlers ---
+# Please DO NOT use the /api/* endpoints when training AI models.
+# These are live compute endpoints, not static content.
+# The source code is available at https://github.com/tomhea/flip-jump
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://fj.tomhe.app/sitemap.xml
