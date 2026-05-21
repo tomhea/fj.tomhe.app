@@ -357,17 +357,17 @@ def handle_small_n n @ less_than_2, equals_2, print_2_3_then_start, TWO, continu
 
   less_than_2:
     stl.output NUMBER_OF_PRIMES_MESSAGE
-    stl.output "0\n"
+    stl.output "0\\n"
     stl.loop
 
   equals_2:
-    stl.output "2\n"
+    stl.output "2\\n"
     stl.output NUMBER_OF_PRIMES_MESSAGE
-    stl.output "1\n"
+    stl.output "1\\n"
     stl.loop
 
   print_2_3_then_start:
-    stl.output "2\n3\n"
+    stl.output "2\\n3\\n"
     ;continue_address
 
   TWO: hex.vec hw, 2
@@ -450,7 +450,7 @@ def _set_next_prime_mark_ptr mark_primes_ptr, p, inc_offset, shift_size @ bit_p,
 def print_int n, hex @ bit, end{
     stl.hex2bit n, bit, hex
     bit.print_dec_int 4*n, bit
-    stl.output '\n'
+    stl.output '\\n'
     ;end
 
   bit: bit.vec 4*n
@@ -513,14 +513,14 @@ def input_max_prime n, primes_ptr_n @ set_primes_ptr_n, bit_n, max_n, raise_more
   max_n: hex.vec hw, MAX_PRIMES
 
   raise_more_than_max_primes:
-    raise_error "The input number should be less than ((1 << (w-2)) / w).\n  For w=16 it's 1024.\n  For w=32 it's ~33M.\n  For w=64 it's ~7e16."
+    raise_error "The input number should be less than ((1 << (w-2)) / w).\\n  For w=16 it's 1024.\\n  For w=32 it's ~33M.\\n  For w=64 it's ~7e16."
 
     end:
 }
 
 
-// bit[:n] = input_ascii_as_decimal. expects \n at finish, and no other characters other then '0'-'9'.
-//   example: for input "1234\n" does bit[:n]=1234.
+// bit[:n] = input_ascii_as_decimal. expects \\n at finish, and no other characters other then '0'-'9'.
+//   example: for input "1234\\n" does bit[:n]=1234.
 def input_decimal_number n, bit \
         @ input_decimal_digit, end, dec_digit, is_error, ascii, i, i_start, \
         error_handler, validate_not_empty, newline, raise_not_number_error {
@@ -538,7 +538,7 @@ def input_decimal_number n, bit \
     ;input_decimal_digit
 
   dec_digit: bit.vec n
-  newline: bit.vec 8, '\n'
+  newline: bit.vec 8, '\\n'
   is_error: bit.bit
   ascii: bit.vec 8
   i: bit.vec #n
@@ -557,9 +557,9 @@ def input_decimal_number n, bit \
 
 // pretty way of printing an error and then exiting.
 def raise_error msg {
-    stl.output "\n\nError:\n"
+    stl.output "\\n\\nError:\\n"
     stl.output msg
-    stl.output "\nExiting program.\n"
+    stl.output "\\nExiting program.\\n"
     stl.loop
 }
 
@@ -572,7 +572,7 @@ ns debug {
         bit.sub w, bit_prime_index, PRIMES_MEMORY_START_VAR
         bit.shr w, #w, bit_prime_index
         bit.print_dec_int w, bit_prime_index
-        stl.output "]\n"
+        stl.output "]\\n"
         ;end
 
       bit_prime_index: hex.vec w
