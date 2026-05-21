@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import type { OnMount } from '@monaco-editor/react';
+import { marked } from 'marked';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
@@ -25,14 +26,16 @@ function languageForStl(name: string): string {
   return 'flipjump';
 }
 
-export default function StlViewer() {
+export default function StlViewer({ initialSearch }: { initialSearch?: string }) {
   // undefined = still loading, null = failed to load, StlIndex = loaded
   const [index, setIndex] = useState<StlIndex | null | undefined>(undefined);
   const [selected, setSelected] = useState<StlEntry | null>(null);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch ?? '');
+  // On mobile, the sidebar collapses to an icon strip after a file is selected.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     fetch('/stl-index.json')
@@ -41,9 +44,17 @@ export default function StlViewer() {
       .catch(() => setIndex(null));
   }, []);
 
+  // Update search when a new initial search term arrives (Ctrl+click from editor).
+  useEffect(() => {
+    if (initialSearch !== undefined) setSearchQuery(initialSearch);
+  }, [initialSearch]);
+
   async function selectFile(entry: StlEntry) {
     setSelected(entry);
     setLoading(true);
+    // On mobile, collapse the sidebar to a narrow strip after selecting a file
+    // so the user can see the full content pane.
+    setSidebarCollapsed(true);
     try {
       const res = await fetch(`/stl/${entry.path}`);
       setContent(res.ok ? await res.text() : `// Failed to load ${entry.path}`);
@@ -115,65 +126,123 @@ export default function StlViewer() {
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
-      {/* File tree */}
+      {/* File tree — collapses to ~40px icon strip on mobile after file selection */}
       <div
-        className="flex flex-col overflow-y-auto shrink-0"
-        style={{ width: 180, borderRight: '1px solid #3c3c3c', background: '#252526' }}
+        className="flex flex-col shrink-0 overflow-hidden"
+        style={{
+          width: sidebarCollapsed ? 40 : 180,
+          borderRight: '1px solid #3c3c3c',
+          background: '#252526',
+          transition: 'width 0.15s ease',
+        }}
       >
-        {/* Search input */}
-        <div className="px-2 py-1.5 shrink-0" style={{ borderBottom: '1px solid #3c3c3c' }}>
-          <div className="flex items-center gap-1 rounded px-2 py-0.5"
-            style={{ background: '#3c3c3c', border: '1px solid #555' }}
-          >
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#888" strokeWidth="1.5" style={{ flexShrink: 0 }}>
-              <circle cx="6" cy="6" r="4" />
-              <path d="M10 10l3 3" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search STL…"
-              aria-label="Search standard library"
-              className="flex-1 outline-none bg-transparent text-xs"
-              style={{ color: '#cccccc' }}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-                style={{ color: '#888', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-              >
-                ×
-              </button>
-            )}
+        {/* Expand button shown when sidebar is collapsed */}
+        {sidebarCollapsed ? (
+          <div className="flex flex-col items-center py-1 overflow-y-auto">
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              title="Expand file tree"
+              className="p-2 rounded transition-colors"
+              style={{ color: '#888' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ccc'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#888'; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M6 4l4 4-4 4" />
+              </svg>
+            </button>
+            {/* Mini search icon — tapping it expands the sidebar */}
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              title="Search"
+              className="p-2 rounded transition-colors"
+              style={{ color: '#888' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ccc'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#888'; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="6" cy="6" r="4" />
+                <path d="M10 10l3 3" />
+              </svg>
+            </button>
           </div>
-        </div>
-
-        {searchResults !== null ? (
-          /* Flat search results */
-          searchResults.length === 0 ? (
-            <div className="px-3 py-2 text-xs" style={{ color: '#666' }}>No results</div>
-          ) : (
-            searchResults.map(({ entry, snippet }) => (
-              <SearchResultItem key={entry.path} entry={entry} selected={selected} onSelect={selectFile} snippet={snippet} />
-            ))
-          )
         ) : (
-          /* Normal tree view */
           <>
-            <FileGroup entries={rootFiles} selected={selected} onSelect={selectFile} />
-            {topDirs.map(dir => (
-              <DirGroup
-                key={dir}
-                dir={dir}
-                allEntries={index.files}
-                selected={selected}
-                collapsed={collapsed}
-                onToggle={toggleDir}
-                onSelect={selectFile}
-              />
-            ))}
+            {/* Collapse button — only shown when a file is selected so user can go back to tree */}
+            {selected && (
+              <div className="flex items-center justify-end px-1 py-0.5 shrink-0" style={{ borderBottom: '1px solid #3c3c3c' }}>
+                <button
+                  onClick={() => setSidebarCollapsed(true)}
+                  title="Collapse file tree"
+                  className="p-0.5 rounded transition-colors"
+                  style={{ color: '#666' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ccc'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#666'; }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M10 4l-4 4 4 4" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            {/* Search input */}
+            <div className="px-2 py-1.5 shrink-0" style={{ borderBottom: '1px solid #3c3c3c' }}>
+              <div className="flex items-center gap-1 rounded px-2 py-0.5"
+                style={{ background: '#3c3c3c', border: '1px solid #555' }}
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#888" strokeWidth="1.5" style={{ flexShrink: 0 }}>
+                  <circle cx="6" cy="6" r="4" />
+                  <path d="M10 10l3 3" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search STL…"
+                  aria-label="Search standard library"
+                  className="flex-1 outline-none bg-transparent text-xs"
+                  style={{ color: '#cccccc' }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                    style={{ color: '#888', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* File list — scrollable */}
+            <div className="flex-1 overflow-y-auto">
+              {searchResults !== null ? (
+                /* Flat search results */
+                searchResults.length === 0 ? (
+                  <div className="px-3 py-2 text-xs" style={{ color: '#666' }}>No results</div>
+                ) : (
+                  searchResults.map(({ entry, snippet }) => (
+                    <SearchResultItem key={entry.path} entry={entry} selected={selected} onSelect={selectFile} snippet={snippet} />
+                  ))
+                )
+              ) : (
+                /* Normal tree view */
+                <>
+                  <FileGroup entries={rootFiles} selected={selected} onSelect={selectFile} />
+                  {topDirs.map(dir => (
+                    <DirGroup
+                      key={dir}
+                      dir={dir}
+                      allEntries={index.files}
+                      selected={selected}
+                      collapsed={collapsed}
+                      onToggle={toggleDir}
+                      onSelect={selectFile}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -195,6 +264,8 @@ export default function StlViewer() {
               <div className="flex-1 flex items-center justify-center" style={{ color: '#555', fontSize: 12 }}>
                 Loading…
               </div>
+            ) : selected.name === 'README.md' ? (
+              <MarkdownPane content={content} />
             ) : (
               <MonacoEditor
                 key={selected.path}
@@ -211,7 +282,7 @@ export default function StlViewer() {
                   lineNumbers: 'on',
                   automaticLayout: true,
                   folding: true,
-                  wordWrap: languageForStl(selected.name) === 'markdown' ? 'on' : 'off',
+                  wordWrap: 'off',
                 }}
                 onMount={(_editor, monaco: Parameters<OnMount>[1]) => {
                   // Ensure theme is applied
@@ -227,6 +298,28 @@ export default function StlViewer() {
         )}
       </div>
     </div>
+  );
+}
+
+/** Renders a markdown README.md as formatted HTML using marked. */
+function MarkdownPane({ content }: { content: string }) {
+  const html = useMemo(() => {
+    try {
+      return marked.parse(content, { async: false }) as string;
+    } catch {
+      return `<pre>${content}</pre>`;
+    }
+  }, [content]);
+
+  return (
+    <div
+      className="stl-markdown flex-1 overflow-y-auto px-5 py-4"
+      // dangerouslySetInnerHTML is safe here: this content comes from the
+      // FlipJump STL repository (a known-good source), not user input.
+      // eslint-disable-next-line react/no-danger
+      dangerouslySetInnerHTML={{ __html: html }}
+      style={{ color: '#cccccc', lineHeight: 1.7, fontSize: 13 }}
+    />
   );
 }
 
@@ -326,7 +419,7 @@ function DirGroup({
       <button
         onClick={() => onToggle(dir)}
         className="flex items-center gap-1 w-full text-left px-2 py-0.5 text-xs"
-        style={{ color: '#cccccc', background: 'transparent' }}
+        style={{ color: '#cccccc', background: 'transparent', flexShrink: 0 }}
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2a2d2e'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
       >
@@ -370,6 +463,9 @@ function FileItem({ entry, selected, onSelect }: {
       style={{
         background: isActive ? '#094771' : 'transparent',
         color: isActive ? '#fff' : '#cccccc',
+        // flex-shrink:0 prevents the item from collapsing when the file tree
+        // flex container is squeezed (bug: first few items squashed to ~1px).
+        flexShrink: 0,
       }}
       onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = '#2a2d2e'; }}
       onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}

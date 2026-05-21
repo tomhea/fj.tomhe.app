@@ -39,6 +39,10 @@ export default function FileTree({
   // Drag-and-drop reorder state
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // 'end' means the drop-after-last sentinel is hovered
+  const [dragOverEnd, setDragOverEnd] = useState(false);
+  // Hover state for file delete button
+  const [hoveredFileId, setHoveredFileId] = useState<string | null>(null);
   // Hover state for source delete button
   const [hoveredSourceIdx, setHoveredSourceIdx] = useState<number | null>(null);
 
@@ -64,6 +68,16 @@ export default function FileTree({
     // After removing fromIdx, if the target was to the right it shifted left by 1.
     const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx;
     next.splice(insertAt, 0, item);
+    onReorderFiles(next);
+  }
+
+  // Reorder files: move the dragged file to the very end.
+  function handleFileDropEnd() {
+    const fromIdx = files.findIndex((f) => f.id === draggedId);
+    if (fromIdx < 0 || fromIdx === files.length - 1) return;
+    const next = [...files];
+    const [item] = next.splice(fromIdx, 1);
+    next.push(item);
     onReorderFiles(next);
   }
 
@@ -213,7 +227,7 @@ export default function FileTree({
                 }}
                 onDragLeave={() => setDragOverId(null)}
                 onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
-                className="flex items-center gap-1.5 px-3 py-0.5 cursor-pointer text-xs truncate transition-colors"
+                className="flex items-center gap-1 px-3 py-0.5 cursor-pointer text-xs transition-colors"
                 style={{
                   background: file.id === activeFileId && activeSourceIdx === null ? '#094771' : 'transparent',
                   color: file.id === activeFileId && activeSourceIdx === null ? '#ffffff'
@@ -223,16 +237,41 @@ export default function FileTree({
                     ? '2px solid #0078d4' : '2px solid transparent',
                 }}
                 onMouseEnter={(e) => {
+                  setHoveredFileId(file.id);
                   if (!(file.id === activeFileId && activeSourceIdx === null))
                     (e.currentTarget as HTMLDivElement).style.background = '#2a2d2e';
                 }}
                 onMouseLeave={(e) => {
+                  setHoveredFileId(null);
                   if (!(file.id === activeFileId && activeSourceIdx === null))
                     (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                 }}
               >
                 <FjFileIcon active={file.id === activeFileId && activeSourceIdx === null} />
-                <span className="truncate">{file.name}</span>
+                <span className="truncate flex-1 min-w-0">{file.name}</span>
+                {hoveredFileId === file.id && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteFile(file.id);
+                    }}
+                    title="Delete file"
+                    className="shrink-0 ml-0.5 rounded transition-colors"
+                    style={{
+                      color: '#888',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      lineHeight: 1,
+                      padding: '0 1px',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f44747'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#888'; }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -254,6 +293,30 @@ export default function FileTree({
               <div className="mt-0.5 text-xs" style={{ color: '#f44747' }}>{editError}</div>
             )}
           </div>
+        )}
+
+        {/* Drop-after-last sentinel: lets users drag a file to the last position */}
+        {draggedId && (
+          <div
+            style={{
+              height: 6,
+              borderTop: dragOverEnd ? '2px solid #0078d4' : '2px solid transparent',
+              marginTop: 2,
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              setDragOverEnd(true);
+              setDragOverId(null);
+            }}
+            onDragLeave={() => setDragOverEnd(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleFileDropEnd();
+              setDraggedId(null);
+              setDragOverEnd(false);
+            }}
+          />
         )}
 
         {/* Sources section */}
@@ -341,7 +404,6 @@ export default function FileTree({
             label="Delete"
             danger
             onClick={() => {
-              if (files.length === 1) return;
               onDeleteFile(contextMenu.id);
               setContextMenu(null);
             }}

@@ -6,10 +6,19 @@ import StlViewer from './StlViewer';
 interface DocsPanelProps {
   open: boolean;
   onClose: () => void;
+  /** When set, the panel opens to the STL tab with this pre-filled search query. */
+  initialStlSearch?: string;
 }
 
-export default function DocsPanel({ open, onClose }: DocsPanelProps) {
+export default function DocsPanel({ open, onClose, initialStlSearch }: DocsPanelProps) {
   const [tab, setTab] = useState<'ref' | 'stl'>('ref');
+
+  // When opened with an initial STL search term, switch to the STL tab.
+  useEffect(() => {
+    if (open && initialStlSearch) {
+      setTab('stl');
+    }
+  }, [open, initialStlSearch]);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   // Remember the trigger so we can restore focus when the panel closes —
@@ -135,7 +144,7 @@ export default function DocsPanel({ open, onClose }: DocsPanelProps) {
         {/* Content */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {tab === 'ref' && <FJReference />}
-          {tab === 'stl' && <StlViewer />}
+          {tab === 'stl' && <StlViewer initialSearch={open ? initialStlSearch : undefined} />}
         </div>
       </div>
     </>

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { zipSync, strToU8 } from 'fflate';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
 import Terminal from './Terminal';
@@ -124,6 +125,7 @@ export default function IDE() {
   const [stdinContent, setStdinContent] = useState('');
   const [markers, setMarkers] = useState<MonacoMarker[]>([]);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [stlSearch, setStlSearch] = useState<string | undefined>(undefined);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => loadFromLocalStorage<boolean>('fj-ide-sidebar-collapsed') ?? false,
   );
@@ -247,16 +249,19 @@ export default function IDE() {
   const deleteFile = useCallback(
     (id: string) => {
       setFiles((prev) => {
-        if (prev.length <= 1) {
-          addLine('error', "Can't delete the last file.");
-          return prev;
-        }
         const next = prev.filter((f) => f.id !== id);
+        if (next.length === 0) {
+          // Deleting the last file: create a fresh untitled.fj
+          const fresh: FJFile = { id: uuidv4(), name: 'untitled.fj', content: `// untitled.fj\n` };
+          setActiveFileId(fresh.id);
+          setActiveSourceIdx(null);
+          return [fresh];
+        }
         setActiveFileId((current) => (current === id ? next[0].id : current));
         return next;
       });
     },
-    [addLine],
+    [],
   );
 
   const deleteSource = useCallback((idx: number) => {
@@ -340,6 +345,7 @@ export default function IDE() {
     const ctrl = new AbortController();
     compileAbortRef.current = ctrl;
 
+    clearTerminal();
     setCompileStatus('compiling');
     setMarkers([]);
     addLine('info', '⟶ Compiling…');
@@ -380,7 +386,7 @@ export default function IDE() {
       addLine('error', `Compilation error: ${(err as Error).message}`);
       return null;
     }
-  }, [files, addLine]);
+  }, [files, addLine, clearTerminal]);
 
   const compile = useCallback(async () => {
     await doCompile();
@@ -391,7 +397,10 @@ export default function IDE() {
   const downloadFjm = useCallback(async () => {
     let fjm = compiledFjm;
     if (!fjm) {
+      // doCompile clears the terminal itself
       fjm = await doCompile();
+    } else {
+      clearTerminal();
     }
     if (!fjm) return;
 
@@ -404,7 +413,41 @@ export default function IDE() {
     a.click();
     URL.revokeObjectURL(url);
     addLine('info', '↓ Downloaded program.fjm');
-  }, [compiledFjm, doCompile, addLine]);
+  }, [compiledFjm, doCompile, addLine, clearTerminal]);
+
+  // ── Download FJ Project ───────────────────────────────────────────────────
+
+  const downloadFjProject = useCallback(() => {
+    if (files.length === 1) {
+      // Single file → direct download
+      const blob = new Blob([files[0].content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = files[0].name;
+      a.click();
+      URL.revokeObjectURL(url);
+      addLine('info', `↓ Downloaded ${files[0].name}`);
+    } else {
+      // Multiple files → zip with files_order.txt
+      const order = files.map((f) => f.name).join('\n') + '\n';
+      const zipInput: Record<string, Uint8Array> = {
+        'files_order.txt': strToU8(order),
+      };
+      for (const f of files) {
+        zipInput[f.name] = strToU8(f.content);
+      }
+      const zipped = zipSync(zipInput);
+      const blob = new Blob([zipped], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fj-project.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+      addLine('info', `↓ Downloaded fj-project.zip (${files.length} files)`);
+    }
+  }, [files, addLine]);
 
   // ── Import BF ─────────────────────────────────────────────────────────────
 
@@ -417,6 +460,7 @@ export default function IDE() {
           ? prev.map((s, i) => (i === existing ? entry : s))
           : [...prev, entry];
       });
+      clearTerminal();
       addLine('info', `⟶ Converting ${filename} via bf2fj…`);
 
       importAbortRef.current?.abort();
@@ -449,7 +493,7 @@ export default function IDE() {
         addLine('error', `bf2fj error: ${(err as Error).message}`);
       }
     },
-    [importSingleFj, addLine],
+    [importSingleFj, addLine, clearTerminal],
   );
 
   // ── Import C ──────────────────────────────────────────────────────────────
@@ -468,6 +512,7 @@ export default function IDE() {
             : [...prev, entry];
         });
       }
+      clearTerminal();
       addLine('info', `⟶ Converting ${file?.name ?? 'C project'} via c2fj…`);
 
       importAbortRef.current?.abort();
@@ -507,7 +552,7 @@ export default function IDE() {
         addLine('error', `c2fj error: ${(err as Error).message}`);
       }
     },
-    [addLine],
+    [addLine, clearTerminal],
   );
 
   // ── WebSocket Runner ──────────────────────────────────────────────────────
@@ -722,6 +767,7 @@ export default function IDE() {
           compiledFjm={compiledFjm}
           onCompile={compile}
           onDownloadFjm={downloadFjm}
+          onDownloadFjProject={downloadFjProject}
           onRunFj={() => runOnline('fj')}
           onRunFjm={() => runOnline('fjm')}
           onKill={killProcess}
@@ -731,7 +777,7 @@ export default function IDE() {
           onImportFjm={importFjm}
           onLoadExample={loadExample}
           onCopyLink={copyLink}
-          onOpenDocs={() => setDocsOpen(true)}
+          onOpenDocs={() => { setStlSearch(undefined); setDocsOpen(true); }}
           c2fjOutput={c2fjOutput}
           onRunC2fjSource={runC2fjSource}
         />
@@ -793,6 +839,10 @@ export default function IDE() {
               markers={markers}
               readOnly={viewReadOnly}
               overrideLanguage={viewLanguage}
+              onCtrlClick={(word) => {
+                setStlSearch(word);
+                setDocsOpen(true);
+              }}
             />
           </div>
 
@@ -845,7 +895,7 @@ export default function IDE() {
         />
       </nav>
 
-      <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} />
+      <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} initialStlSearch={stlSearch} />
     </div>
   );
 }
