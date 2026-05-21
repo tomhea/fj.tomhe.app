@@ -522,7 +522,7 @@ prompt_string:  bit.str ">  "
   // ── 9. Prime Sieve ────────────────────────────────────────────────────────
   {
     name: 'Prime Sieve',
-    description: 'Find primes up to 30 with trial division — loops, comparison, and division.',
+    description: 'Find primes up to a given input.',
     files: [
       {
         name: 'prime_sieve.fj',
@@ -856,7 +856,7 @@ ns debug {
   // ── 10. Multi-file Compilation ────────────────────────────────────────────
   {
     name: 'Multi-file Compilation',
-    description: 'Two-file project: a library defines a macro used by the main file.',
+    description: 'Four-file project: a library defines a macro used by the main file.',
     files: [
       {
         name: 'greet.fj',
@@ -875,19 +875,29 @@ ns mylib {
 `,
       },
       {
-        name: 'main.fj',
-        content: `// main.fj — entry point; uses mylib.greet from greet.fj.
+        name: 'start.fj',
+        content: `// start.fj — entry point; calls the startup macro - which initializes the first few fj-ops for the standard library use.
 //
-// Multi-file compilation: all .fj files are assembled together in the order
-// shown in the Explorer sidebar.  Macros in earlier files are available here.
-//
-// Try dragging greet.fj below main.fj — the compile will fail because
-// mylib.greet is no longer defined before it is called.
+// This file must be compiled before any non-macro code.
 
 stl.startup
+`,
+      },
+      {
+        name: 'main.fj',
+        content: `// main.fj — uses mylib.greet from greet.fj.
+//
+// Try dragging start.fj and end.fj and sort the files differently — compile and see what happens.
 
 mylib.greet "World"
 mylib.greet "FlipJump"
+`,
+      },
+      {
+        name: 'end.fj',
+        content: `// end.fj — calls the loop macro - actually just jumps to itself - which is the way of finishing a program in flipjump.
+//
+// This file must be compiled before any non-macro code.
 
 stl.loop
 `,
