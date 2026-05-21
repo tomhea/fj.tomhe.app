@@ -312,6 +312,7 @@ d:          bit.vec w, 0
 tmp_n:      bit.vec w, 0
 quot:       bit.vec w, 0
 rem:        bit.vec w, 0
+one:        bit.vec w, 1
 two:        bit.vec w, 2
 limit_val:  bit.vec w, LIMIT
 `,
