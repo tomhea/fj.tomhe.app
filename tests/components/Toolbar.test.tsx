@@ -21,6 +21,7 @@ function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
     onImportBf: vi.fn(),
     onImportC: vi.fn(),
     onImportFj: vi.fn(),
+    onImportError: vi.fn(),
     onImportFjm: vi.fn(),
     onLoadExample: vi.fn(),
     onCopyLink: vi.fn(),

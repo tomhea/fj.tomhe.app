@@ -19,7 +19,9 @@ interface ToolbarProps {
   onKill: () => void;
   onImportBf: (content: string, filename: string) => void;
   onImportC: (formData: FormData) => void;
-  onImportFj: (files: Array<{ name: string; content: string }>) => void;
+  onImportFj: (files: Array<{ name: string; content: string }>, replace?: boolean) => void;
+  /** Called when an import fails — message is shown in the terminal. */
+  onImportError: (message: string) => void;
   onImportFjm: (base64: string) => void;
   onLoadExample: (ex: Example) => void;
   onCopyLink: () => void;
@@ -32,7 +34,7 @@ interface ToolbarProps {
 export default function Toolbar({
   compileStatus, runStatus, compiledFjm,
   onCompile, onDownloadFjm, onDownloadFjProject, onRunFj, onRunFjm, onKill,
-  onImportBf, onImportC, onImportFj, onImportFjm,
+  onImportBf, onImportC, onImportFj, onImportError, onImportFjm,
   onLoadExample, onCopyLink, onOpenDocs,
   c2fjOutput, onRunC2fjSource,
 }: ToolbarProps) {
@@ -83,7 +85,7 @@ export default function Toolbar({
     if (!uploadedFiles.length) return;
 
     // Single .zip → treat as a "Download Project" zip: read files_order.txt for order,
-    // then extract all .fj files in that order.
+    // then extract all .fj files in that order, replacing the current project.
     if (uploadedFiles.length === 1 && uploadedFiles[0].name.toLowerCase().endsWith('.zip')) {
       try {
         const buf = await uploadedFiles[0].arrayBuffer();
@@ -102,9 +104,14 @@ export default function Toolbar({
           .filter(name => entries[name] !== undefined)
           .map(name => ({ name, content: decoder.decode(entries[name]) }));
 
-        if (parsed.length > 0) onImportFj(parsed);
+        if (parsed.length > 0) {
+          // replace=true: discard existing .fj files, load only the zip's files
+          onImportFj(parsed, true);
+        } else {
+          onImportError('ZIP import: no .fj files found in archive.');
+        }
       } catch (err) {
-        console.error('ZIP import failed:', err);
+        onImportError(`ZIP import failed: ${err instanceof Error ? err.message : String(err)}`);
       }
       e.target.value = '';
       return;

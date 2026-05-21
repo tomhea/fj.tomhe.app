@@ -282,9 +282,11 @@ export default function IDE() {
   }, []);
 
   const importFjFiles = useCallback(
-    (incoming: Array<{ name: string; content: string }>) => {
+    (incoming: Array<{ name: string; content: string }>, replace = false) => {
       setFiles((prev) => {
-        const updated = [...prev];
+        // replace=true (zip project import): discard existing files entirely.
+        const base = replace ? [] : [...prev];
+        const updated = [...base];
         let lastId = '';
         for (const inc of incoming) {
           const existing = updated.find((f) => f.name === inc.name);
@@ -301,6 +303,12 @@ export default function IDE() {
         if (lastId) {
           setActiveFileId(lastId);
           setActiveSourceIdx(null);
+        }
+        // Never leave the editor with zero files (shouldn't happen, but guard anyway).
+        if (updated.length === 0) {
+          const fresh: FJFile = { id: uuidv4(), name: 'untitled.fj', content: '// untitled.fj\n' };
+          setActiveFileId(fresh.id);
+          return [fresh];
         }
         return updated;
       });
@@ -774,6 +782,7 @@ export default function IDE() {
           onImportBf={importBf}
           onImportC={importC}
           onImportFj={importFjFiles}
+          onImportError={(msg) => addLine('error', msg)}
           onImportFjm={importFjm}
           onLoadExample={loadExample}
           onCopyLink={copyLink}
@@ -840,7 +849,8 @@ export default function IDE() {
               readOnly={viewReadOnly}
               overrideLanguage={viewLanguage}
               onCtrlClick={(word) => {
-                setStlSearch(word);
+                // Search for the macro definition so the STL viewer jumps to `def <word>`.
+                setStlSearch(`def ${word}`);
                 setDocsOpen(true);
               }}
             />

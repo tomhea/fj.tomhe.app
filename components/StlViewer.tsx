@@ -49,6 +49,7 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
 
   // Update search when a new initial search term arrives (Ctrl+click from editor).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (initialSearch !== undefined) setSearchQuery(initialSearch);
   }, [initialSearch]);
 
@@ -359,7 +360,6 @@ function MarkdownPane({ content }: { content: string }) {
       className="stl-markdown flex-1 overflow-y-auto px-5 py-4"
       // dangerouslySetInnerHTML is safe here: this content comes from the
       // FlipJump STL repository (a known-good source), not user input.
-      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: html }}
       style={{ color: '#cccccc', lineHeight: 1.7, fontSize: 13 }}
     />

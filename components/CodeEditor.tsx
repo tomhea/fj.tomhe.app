@@ -160,12 +160,12 @@ function registerFlipJumpLanguage(monaco: MonacoInstance) {
         // Constants: identifier immediately before '='  (strict: no dots)
         [/[A-Za-z_]\w*(?=\s*=)/, 'variable.constant'],
 
-        // Macro calls: any identifier (optionally namespace-qualified with dots) followed by
-        // whitespace + a non-; arg. Keywords, types, and directives are excluded via a
-        // negative lookahead so `ns foo { }`, `pad 8`, `wflip addr, val`, etc. still fall
-        // through to the keyword/type/directive cases below.
-        // Examples matched: stl.output_char, bit.add, myMacro arg, output_char 'H'
-        [/(?!(?:def|ns|rep|pad|reserve|segment|wflip|dbit|dw|w)\b)[A-Za-z_.][\w.]*(?=[ \t]+[^;\s\/])/, 'macro.call'],
+        // Macro calls: any identifier (optionally namespace-qualified with dots) that is
+        // either followed by whitespace + a non-; arg, OR appears at end of line (bare call).
+        // Keywords, types, and directives are excluded via a negative lookahead so
+        // `ns foo { }`, `pad 8`, `wflip addr, val`, etc. fall through to keyword/type/directive.
+        // Examples matched: stl.output_char 'H', bit.add w, a, b, stl.loop, .startup, myMacro
+        [/(?!(?:def|ns|rep|pad|reserve|segment|wflip|dbit|dw|w)\b)[A-Za-z_.][\w.]*(?=[ \t]+[^;\s\/]|[ \t]*(?:\/\/|$))/, 'macro.call'],
 
         // Identifiers: keywords, types, directives, or plain identifiers (allow dots for namespaces)
         [/[A-Za-z_][\w.]*/, {

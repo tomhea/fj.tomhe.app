@@ -189,7 +189,7 @@ export default function FileTree({
         className="px-3 py-1"
         style={{ color: '#6e6e6e', fontSize: 10, borderBottom: '1px solid #3c3c3c' }}
       >
-        All .fj files are automatically merged and compiled in order.
+        Flipjump reads the files in order, top to bottom.
       </div>
 
       {/* FJ File list */}
