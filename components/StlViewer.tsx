@@ -52,9 +52,11 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
   async function selectFile(entry: StlEntry) {
     setSelected(entry);
     setLoading(true);
-    // On mobile, collapse the sidebar to a narrow strip after selecting a file
-    // so the user can see the full content pane.
-    setSidebarCollapsed(true);
+    // On mobile viewports (≤ 767px — same breakpoint used by the IDE shell)
+    // collapse the sidebar so the content pane fills the screen.
+    const isMobile =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+    if (isMobile) setSidebarCollapsed(true);
     try {
       const res = await fetch(`/stl/${entry.path}`);
       setContent(res.ok ? await res.text() : `// Failed to load ${entry.path}`);
