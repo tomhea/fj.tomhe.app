@@ -189,7 +189,7 @@ export default function FileTree({
         className="px-3 py-1"
         style={{ color: '#6e6e6e', fontSize: 10, borderBottom: '1px solid #3c3c3c' }}
       >
-        All .fj files will be compiled together, in their order
+        All .fj files are automatically merged and compiled in order.
       </div>
 
       {/* FJ File list */}

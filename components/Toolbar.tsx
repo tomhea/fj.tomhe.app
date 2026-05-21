@@ -365,7 +365,7 @@ export default function Toolbar({
       {c2fjOutput && !isRunning && (
         <ToolBtn
           onClick={onRunC2fjSource}
-          title="Run the compiled C→FJ output directly (bypasses editor)"
+          title="Run the compiled FJ file directly"
         >
           <PlayIcon color="#5aa4e8" /> Run C→FJ output
         </ToolBtn>

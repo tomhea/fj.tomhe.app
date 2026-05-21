@@ -513,7 +513,7 @@ export default function IDE() {
         });
       }
       clearTerminal();
-      addLine('info', `⟶ Converting ${file?.name ?? 'C project'} via c2fj…`);
+      addLine('info', `⟶ Converting ${file?.name ?? 'C project'} to a .fj file, via c2fj…`);
 
       importAbortRef.current?.abort();
       const ctrl = new AbortController();
@@ -543,7 +543,7 @@ export default function IDE() {
                 : s,
             ),
           );
-          addLine('info', '✓ C→FJ ready. Click "Run C→FJ output" in the toolbar to execute.');
+          addLine('info', '✓ C→FJ complete. Click "Run C→FJ output" in the toolbar to execute the FJ file.');
         } else {
           addLine('error', data.error ?? 'C conversion failed.');
         }
