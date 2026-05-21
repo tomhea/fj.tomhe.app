@@ -51,6 +51,8 @@ export default function Toolbar({
   const [shortUrl, setShortUrl] = useState('');
   const [shortTooltipPos, setShortTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const c2fjTipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runC2fjTipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tooltip shown below C→FJ after conversion completes: "Now press Run C→FJ output"
   const [c2fjTipPos, setC2fjTipPos] = useState<{ top: number; left: number } | null>(null);
   // Tooltip shown below Run C→FJ output: "For more, search 'c2fj' in Docs"
@@ -130,17 +132,20 @@ export default function Toolbar({
     // Show tooltip pointing users to the Run C→FJ output button
     const rect = c2fjBtnRef.current?.getBoundingClientRect();
     if (rect) setC2fjTipPos({ top: rect.bottom + 6, left: rect.left });
-    setTimeout(() => setC2fjTipPos(null), 5000);
+    if (c2fjTipTimerRef.current) clearTimeout(c2fjTipTimerRef.current);
+    c2fjTipTimerRef.current = setTimeout(() => setC2fjTipPos(null), 5000);
   }
 
   function handleRunC2fjSource() {
     onRunC2fjSource();
     // Dismiss the c2fj tip if still showing
     setC2fjTipPos(null);
+    if (c2fjTipTimerRef.current) clearTimeout(c2fjTipTimerRef.current);
     // Show tip for "Run C→FJ output"
     const rect = runC2fjBtnRef.current?.getBoundingClientRect();
     if (rect) setRunC2fjTipPos({ top: rect.bottom + 6, left: rect.left });
-    setTimeout(() => setRunC2fjTipPos(null), 5000);
+    if (runC2fjTipTimerRef.current) clearTimeout(runC2fjTipTimerRef.current);
+    runC2fjTipTimerRef.current = setTimeout(() => setRunC2fjTipPos(null), 5000);
   }
 
   async function handleShortLink() {
@@ -375,7 +380,7 @@ export default function Toolbar({
             zIndex: 60,
           }}
         >
-          ✓ Ready — now press &ldquo;Run C→FJ output&rdquo;
+          Converting… when done, press &ldquo;Run C→FJ output&rdquo;
         </div>,
         document.body,
       )}

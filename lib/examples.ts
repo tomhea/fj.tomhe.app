@@ -273,15 +273,15 @@ LIMIT = 30
 stl.startup
 
 n_loop:
-    // if n > LIMIT → done
-    bit.cmp w, n, limit_val, print_newline, print_newline, check_n_prime
+    // if n > LIMIT → done; otherwise check if n is prime
+    bit.cmp w, n, limit_val, check_n_prime, check_n_prime, print_newline
 check_n_prime:
     // Reset: d = 2
     bit.mov w, d, two
 
     d_loop:
-        // if d >= n → n is prime
-        bit.cmp w, d, n, n_is_prime, n_is_prime, test_divisor
+        // if d >= n → no divisor found → n is prime
+        bit.cmp w, d, n, test_divisor, n_is_prime, n_is_prime
     test_divisor:
         // tmp_n = n  (idiv_loop destroys its first argument)
         bit.mov w, tmp_n, n

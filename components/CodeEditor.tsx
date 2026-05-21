@@ -160,10 +160,11 @@ function registerFlipJumpLanguage(monaco: MonacoInstance) {
         // Constants: identifier immediately before '='  (strict: no dots)
         [/[A-Za-z_]\w*(?=\s*=)/, 'variable.constant'],
 
-        // Macro calls: an identifier that is followed by whitespace + a non-; argument.
-        // Pattern: identifier (with dots) immediately before whitespace, not before : or =.
-        // We use a lookahead for " " or "\t" followed by a non-comment, non-; char.
-        [/[A-Za-z_][\w.]*(?=[ \t]+[^;\s\/])/, 'macro.call'],
+        // Macro calls: a dotted identifier (namespace.name) followed by whitespace + a non-; arg.
+        // Requiring at least one dot ensures keywords (def, ns, rep — all dot-free) are
+        // NOT matched here and fall through to the keyword/type/directive cases below.
+        // Examples matched: stl.output, bit.add, bit.cmp, hex.mul, mylib.greet
+        [/[A-Za-z_]\w*(?:\.\w+)+(?=[ \t]+[^;\s\/])/, 'macro.call'],
 
         // Identifiers: keywords, types, directives, or plain identifiers (allow dots for namespaces)
         [/[A-Za-z_][\w.]*/, {
