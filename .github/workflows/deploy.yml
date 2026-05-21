@@ -22,7 +22,7 @@ jobs:
           cache: 'npm'
 
       - name: Install + build
-        run: | 
+        run: |
           npm ci
           npm run build
 
@@ -35,16 +35,19 @@ jobs:
           remote_host: ${{ secrets.SSH_HOST }}
           remote_user: ${{ secrets.SSH_USER }}
           remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
-        
+
       - name: Deploy via rsync + restart service
         uses: appleboy/ssh-action@v1.2.5
+        env:
+          WEB_ROOT_PATH: ${{ secrets.WEB_ROOT_PATH }}
+          VENV_PATH: ${{ secrets.VENV_PATH }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /var/www/fj/
-            source /root/.venv/bin/activate
+            cd "${WEB_ROOT_PATH}"
+            source "${VENV_PATH}/bin/activate"
             npm config set legacy-peer-deps true
             npm ci --omit=dev
             sudo systemctl restart fj
