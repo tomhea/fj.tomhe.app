@@ -13,6 +13,10 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
 
+  // Generous per-test timeout: freshSession() navigates twice + waits for
+  // Monaco to mount; under CI memory pressure this can exceed the 30s default.
+  timeout: 60_000,
+
   use: {
     baseURL: 'http://localhost:3713',
     trace: 'on-first-retry',
