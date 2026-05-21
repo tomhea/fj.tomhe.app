@@ -19,12 +19,14 @@ export default function DocsPanel({ open, onClose, initialStlSearch, initialStlS
 
   // Reset full-width when the panel is closed.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!open) setFullWidth(false);
   }, [open]);
 
   // When opened with an initial STL search term, switch to the STL tab.
   useEffect(() => {
     if (open && initialStlSearch) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTab('stl');
     }
   }, [open, initialStlSearch]);

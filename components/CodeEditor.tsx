@@ -32,7 +32,10 @@ export default function CodeEditor({ file, onChange, markers, readOnly, override
   const monacoRef = useRef<MonacoInstance | null>(null);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const onCtrlClickRef = useRef(onCtrlClick);
-  onCtrlClickRef.current = onCtrlClick;
+  // Keep the ref in sync with the latest prop value without mutating it during
+  // render (which triggers react-hooks/refs).  The ref is only read in event
+  // handlers so a one-render lag is harmless.
+  useEffect(() => { onCtrlClickRef.current = onCtrlClick; });
 
   const handleMount: OnMount = (editor, monaco) => {
     monacoRef.current = monaco;

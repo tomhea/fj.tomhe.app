@@ -86,7 +86,6 @@ export default function StlViewer({ initialSearch, searchTick }: { initialSearch
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearchQuery(initialSearch);
       autoSelectQueryRef.current = initialSearch.trim().toLowerCase();
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutoSelectTick(t => t + 1);
     }
   }, [initialSearch, searchTick]);

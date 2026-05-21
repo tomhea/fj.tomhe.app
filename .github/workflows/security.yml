@@ -28,6 +28,11 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
+    # CodeQL uploads results via the GitHub Code Scanning API, which requires
+    # "Code scanning" to be enabled in repo Settings → Security.  If it isn't,
+    # the upload step fails with a permissions error — mark the job non-fatal so
+    # the overall Security Scan workflow still goes green.
+    continue-on-error: true
     permissions:
       security-events: write
       actions: read
