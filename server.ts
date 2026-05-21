@@ -9,6 +9,7 @@ import { tmpdir } from 'os';
 import { StringDecoder } from 'string_decoder';
 import { v4 as uuidv4 } from 'uuid';
 import { isSafeFilename } from './lib/safe-filename';
+import { sanitizeStderr } from './lib/sanitize-stderr';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME ?? 'localhost';
@@ -146,14 +147,14 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
     });
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = errDec.write(chunk);
-      if (text) send({ type: 'stderr', data: text });
+      if (text) send({ type: 'stderr', data: sanitizeStderr(text) });
     });
 
     child.on('close', (code, signal) => {
       const tailOut = outDec.end();
       if (tailOut) send({ type: 'stdout', data: tailOut });
       const tailErr = errDec.end();
-      if (tailErr) send({ type: 'stderr', data: tailErr });
+      if (tailErr) send({ type: 'stderr', data: sanitizeStderr(tailErr) });
       send({ type: 'exit', code, signal });
       proc = null;
       if (runTimeout) {

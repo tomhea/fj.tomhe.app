@@ -160,7 +160,7 @@ export default function FileTree({
       {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-1 text-xs uppercase tracking-widest"
-        style={{ color: '#bbbbbb', borderBottom: '1px solid #3c3c3c', minHeight: 32 }}
+        style={{ color: '#bbbbbb', minHeight: 32 }}
       >
         <span>Explorer</span>
         <div className="flex items-center gap-0.5">
@@ -182,6 +182,14 @@ export default function FileTree({
             <CollapseIcon />
           </button>
         </div>
+      </div>
+
+      {/* Explorer subtitle */}
+      <div
+        className="px-3 py-1"
+        style={{ color: '#6e6e6e', fontSize: 10, borderBottom: '1px solid #3c3c3c' }}
+      >
+        All .fj files will be compiled together, in their order
       </div>
 
       {/* FJ File list */}

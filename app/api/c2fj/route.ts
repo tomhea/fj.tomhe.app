@@ -7,6 +7,7 @@ import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import AdmZip from 'adm-zip';
 import { isSafeCFilename } from '@/lib/safe-filename';
+import { sanitizeStderr } from '@/lib/sanitize-stderr';
 
 const execFileAsync = promisify(execFile);
 
@@ -158,15 +159,15 @@ export async function POST(req: NextRequest) {
       const e = err as { stderr?: string; message?: string };
       return NextResponse.json({
         success: false,
-        error: e.message ?? 'C conversion failed.',
-        stderr: e.stderr ?? '',
+        error: 'C conversion failed.',
+        stderr: sanitizeStderr(e.stderr ?? ''),
       });
     }
 
     // c2fj writes unified.fj into the build dir when --unify-fj is set.
     const outPath = join(buildDir, 'unified.fj');
     const fjContent = await readFile(outPath, 'utf8');
-    return NextResponse.json({ success: true, fjContent, stderr });
+    return NextResponse.json({ success: true, fjContent, stderr: sanitizeStderr(stderr) });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: (err as Error).message },

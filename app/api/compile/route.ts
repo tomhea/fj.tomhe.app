@@ -6,6 +6,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { isSafeFilename } from '@/lib/safe-filename';
+import { sanitizeStderr } from '@/lib/sanitize-stderr';
 
 const execFileAsync = promisify(execFile);
 
@@ -91,15 +92,15 @@ export async function POST(req: NextRequest) {
       const e = err as { stderr?: string; message?: string };
       return NextResponse.json({
         success: false,
-        error: e.message ?? 'Compilation failed.',
-        stderr: e.stderr ?? '',
+        error: 'Compilation failed.',
+        stderr: sanitizeStderr(e.stderr ?? ''),
       });
     }
 
     const fjmBuffer = await readFile(outPath);
     const fjmBase64 = fjmBuffer.toString('base64');
 
-    return NextResponse.json({ success: true, fjmBase64, stderr });
+    return NextResponse.json({ success: true, fjmBase64, stderr: sanitizeStderr(stderr) });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: (err as Error).message },

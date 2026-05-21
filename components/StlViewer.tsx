@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import type { OnMount } from '@monaco-editor/react';
 import { marked } from 'marked';
@@ -36,6 +36,9 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
   const [searchQuery, setSearchQuery] = useState(initialSearch ?? '');
   // On mobile, the sidebar collapses to an icon strip after a file is selected.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Editor ref + pending highlight query (set when a search result is clicked).
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const highlightQueryRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetch('/stl-index.json')
@@ -49,7 +52,9 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
     if (initialSearch !== undefined) setSearchQuery(initialSearch);
   }, [initialSearch]);
 
-  async function selectFile(entry: StlEntry) {
+  async function selectFile(entry: StlEntry, highlight?: string) {
+    highlightQueryRef.current = highlight ?? null;
+    editorRef.current = null; // will be refreshed by onMount for the new key
     setSelected(entry);
     setLoading(true);
     // On mobile viewports (≤ 767px — same breakpoint used by the IDE shell)
@@ -66,6 +71,27 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
       setLoading(false);
     }
   }
+
+  // After content loads (loading → false), attempt to highlight the pending
+  // search query in the Monaco editor.  Monaco renders only when !loading,
+  // so onMount fires before or shortly after this effect — we check the
+  // editorRef in both places and use a short delay to let Monaco finish
+  // processing the initial value prop.
+  useEffect(() => {
+    const q = highlightQueryRef.current;
+    if (loading || !content || !q || !editorRef.current) return;
+    const editor = editorRef.current;
+    const timer = setTimeout(() => {
+      const model = editor.getModel();
+      if (!model) return;
+      const matches = model.findMatches(q, false, false, false, null, true);
+      if (matches.length > 0) {
+        editor.revealLineInCenter(matches[0].range.startLineNumber);
+        editor.setSelection(matches[0].range);
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [loading, content]);
 
   function toggleDir(dir: string) {
     setCollapsed(prev => {
@@ -96,7 +122,7 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
   // `content` gracefully skip content search.
   const query = searchQuery.trim().toLowerCase();
 
-  type SearchResult = { entry: StlEntry; snippet: string | null };
+  type SearchResult = { entry: StlEntry; snippet: string | null; };
   const searchResults: SearchResult[] | null = query
     ? index.files.flatMap((f): SearchResult[] => {
         const nameMatch =
@@ -224,13 +250,13 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
                   <div className="px-3 py-2 text-xs" style={{ color: '#666' }}>No results</div>
                 ) : (
                   searchResults.map(({ entry, snippet }) => (
-                    <SearchResultItem key={entry.path} entry={entry} selected={selected} onSelect={selectFile} snippet={snippet} />
+                    <SearchResultItem key={entry.path} entry={entry} selected={selected} onSelect={selectFile} snippet={snippet} query={query} />
                   ))
                 )
               ) : (
                 /* Normal tree view */
                 <>
-                  <FileGroup entries={rootFiles} selected={selected} onSelect={selectFile} />
+                  <FileGroup entries={rootFiles} selected={selected} onSelect={(e) => selectFile(e)} />
                   {topDirs.map(dir => (
                     <DirGroup
                       key={dir}
@@ -239,7 +265,7 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
                       selected={selected}
                       collapsed={collapsed}
                       onToggle={toggleDir}
-                      onSelect={selectFile}
+                      onSelect={(e) => selectFile(e)}
                     />
                   ))}
                 </>
@@ -286,9 +312,24 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
                   folding: true,
                   wordWrap: 'off',
                 }}
-                onMount={(_editor, monaco: Parameters<OnMount>[1]) => {
-                  // Ensure theme is applied
+                onMount={(editor, monaco: Parameters<OnMount>[1]) => {
+                  editorRef.current = editor;
                   monaco.editor.setTheme('fj-dark');
+                  // If onMount fires after content is already loaded (common path),
+                  // run the highlight here since the useEffect already fired with
+                  // a null editorRef.
+                  const q = highlightQueryRef.current;
+                  if (q) {
+                    setTimeout(() => {
+                      const model = editor.getModel();
+                      if (!model) return;
+                      const matches = model.findMatches(q, false, false, false, null, true);
+                      if (matches.length > 0) {
+                        editor.revealLineInCenter(matches[0].range.startLineNumber);
+                        editor.setSelection(matches[0].range);
+                      }
+                    }, 100);
+                  }
                 }}
               />
             )}
@@ -325,15 +366,17 @@ function MarkdownPane({ content }: { content: string }) {
   );
 }
 
-function SearchResultItem({ entry, selected, onSelect, snippet }: {
+function SearchResultItem({ entry, selected, onSelect, snippet, query }: {
   entry: StlEntry;
   selected: StlEntry | null;
-  onSelect: (e: StlEntry) => void;
+  onSelect: (e: StlEntry, highlight?: string) => void;
   /** A short excerpt of the matching line when the match came from file content. */
   snippet: string | null;
+  /** The active search query — passed to onSelect so Monaco can jump to first match. */
+  query: string;
 }) {
   const isActive = selected?.path === entry.path;
-  function activate() { onSelect(entry); }
+  function activate() { onSelect(entry, query || undefined); }
   return (
     <div
       role="button"

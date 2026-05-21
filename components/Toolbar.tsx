@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
+import { unzipSync } from 'fflate';
 import { CompileStatus, RunStatus } from '@/lib/types';
 import { EXAMPLES, Example } from '@/lib/examples';
 
@@ -41,8 +42,6 @@ export default function Toolbar({
   const fjmInputRef = useRef<HTMLInputElement>(null);
   const examplesBtnRef = useRef<HTMLButtonElement>(null);
   const shortBtnRef = useRef<HTMLButtonElement>(null);
-  const c2fjBtnRef = useRef<HTMLButtonElement>(null);
-  const runC2fjBtnRef = useRef<HTMLButtonElement>(null);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -51,12 +50,6 @@ export default function Toolbar({
   const [shortUrl, setShortUrl] = useState('');
   const [shortTooltipPos, setShortTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const c2fjTipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const runC2fjTipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tooltip shown below C→FJ after conversion completes: "Now press Run C→FJ output"
-  const [c2fjTipPos, setC2fjTipPos] = useState<{ top: number; left: number } | null>(null);
-  // Tooltip shown below Run C→FJ output: "For more, search 'c2fj' in Docs"
-  const [runC2fjTipPos, setRunC2fjTipPos] = useState<{ top: number; left: number } | null>(null);
 
   // Recompute dropdown position whenever it opens or the window resizes/scrolls.
   useEffect(() => {
@@ -88,6 +81,36 @@ export default function Toolbar({
   async function handleFjUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const uploadedFiles = Array.from(e.target.files ?? []);
     if (!uploadedFiles.length) return;
+
+    // Single .zip → treat as a "Download Project" zip: read files_order.txt for order,
+    // then extract all .fj files in that order.
+    if (uploadedFiles.length === 1 && uploadedFiles[0].name.toLowerCase().endsWith('.zip')) {
+      try {
+        const buf = await uploadedFiles[0].arrayBuffer();
+        const entries = unzipSync(new Uint8Array(buf));
+        const decoder = new TextDecoder('utf-8');
+
+        // Determine compilation order from files_order.txt (newline-separated names)
+        const orderRaw = entries['files_order.txt']
+          ? decoder.decode(entries['files_order.txt'])
+          : null;
+        const orderedNames: string[] = orderRaw
+          ? orderRaw.split('\n').map(s => s.trim()).filter(s => s.endsWith('.fj'))
+          : Object.keys(entries).filter(k => k.endsWith('.fj')).sort();
+
+        const parsed = orderedNames
+          .filter(name => entries[name] !== undefined)
+          .map(name => ({ name, content: decoder.decode(entries[name]) }));
+
+        if (parsed.length > 0) onImportFj(parsed);
+      } catch (err) {
+        console.error('ZIP import failed:', err);
+      }
+      e.target.value = '';
+      return;
+    }
+
+    // Regular .fj file(s)
     const parsed = await Promise.all(
       uploadedFiles.map(async (f) => ({ name: f.name, content: await f.text() }))
     );
@@ -129,23 +152,6 @@ export default function Toolbar({
     fd.append('file', file);
     onImportC(fd);
     e.target.value = '';
-    // Show tooltip pointing users to the Run C→FJ output button
-    const rect = c2fjBtnRef.current?.getBoundingClientRect();
-    if (rect) setC2fjTipPos({ top: rect.bottom + 6, left: rect.left });
-    if (c2fjTipTimerRef.current) clearTimeout(c2fjTipTimerRef.current);
-    c2fjTipTimerRef.current = setTimeout(() => setC2fjTipPos(null), 5000);
-  }
-
-  function handleRunC2fjSource() {
-    onRunC2fjSource();
-    // Dismiss the c2fj tip if still showing
-    setC2fjTipPos(null);
-    if (c2fjTipTimerRef.current) clearTimeout(c2fjTipTimerRef.current);
-    // Show tip for "Run C→FJ output"
-    const rect = runC2fjBtnRef.current?.getBoundingClientRect();
-    if (rect) setRunC2fjTipPos({ top: rect.bottom + 6, left: rect.left });
-    if (runC2fjTipTimerRef.current) clearTimeout(runC2fjTipTimerRef.current);
-    runC2fjTipTimerRef.current = setTimeout(() => setRunC2fjTipPos(null), 5000);
   }
 
   async function handleShortLink() {
@@ -205,9 +211,9 @@ export default function Toolbar({
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
 
-      {/* FJ file import */}
-      <input ref={fjInputRef} type="file" accept=".fj" multiple className="hidden" onChange={handleFjUpload} />
-      <ToolBtn onClick={() => fjInputRef.current?.click()} title="Import .fj files">
+      {/* FJ file import — also accepts a project .zip (files_order.txt + .fj files) */}
+      <input ref={fjInputRef} type="file" accept=".fj,.zip" multiple className="hidden" onChange={handleFjUpload} />
+      <ToolBtn onClick={() => fjInputRef.current?.click()} title="Import .fj files or a project .zip">
         <FolderOpenIcon /> Import FJ
       </ToolBtn>
 
@@ -261,14 +267,14 @@ export default function Toolbar({
         Compile
       </ToolBtn>
 
+      {/* Download Project (FJ source) — comes before Download FJM */}
+      <ToolBtn onClick={onDownloadFjProject} title="Download FJ source files (single .fj or .zip for multi-file projects)">
+        <DownloadIcon color="#cccccc" /> Download Project
+      </ToolBtn>
+
       {/* Download FJM */}
       <ToolBtn onClick={onDownloadFjm} disabled={isCompiling} title="Compile and download .fjm binary">
         <DownloadIcon color={compiledFjm ? '#4ec9b0' : '#cccccc'} /> Download FJM
-      </ToolBtn>
-
-      {/* Download FJ Project */}
-      <ToolBtn onClick={onDownloadFjProject} title="Download FJ source files (single .fj or .zip for multi-file projects)">
-        <DownloadIcon color="#cccccc" /> Download FJ
       </ToolBtn>
 
       {/* Upload FJM */}
@@ -351,57 +357,18 @@ export default function Toolbar({
 
       {/* C import */}
       <input ref={cInputRef} type="file" accept=".c,.cpp,.zip" className="hidden" onChange={handleImportC} />
-      <ToolBtn ref={c2fjBtnRef} onClick={() => cInputRef.current?.click()} title="Import C project (.c, .cpp, or .zip) → compile to FJ">
+      <ToolBtn onClick={() => cInputRef.current?.click()} title="Import C project (.c, .cpp, or .zip) → compile to FJ">
         <CIcon /> C → FJ
       </ToolBtn>
 
       {/* Run C→FJ output — only shown when a c2fj result is ready */}
       {c2fjOutput && !isRunning && (
         <ToolBtn
-          ref={runC2fjBtnRef}
-          onClick={handleRunC2fjSource}
+          onClick={onRunC2fjSource}
           title="Run the compiled C→FJ output directly (bypasses editor)"
         >
           <PlayIcon color="#5aa4e8" /> Run C→FJ output
         </ToolBtn>
-      )}
-
-      {/* C→FJ tip tooltip */}
-      {c2fjTipPos && createPortal(
-        <div
-          className="fixed text-xs rounded px-2 py-1 shadow-lg pointer-events-none"
-          style={{
-            top: c2fjTipPos.top,
-            left: c2fjTipPos.left,
-            background: '#1e1e1e',
-            border: '1px solid #454545',
-            color: '#e8c47a',
-            whiteSpace: 'nowrap',
-            zIndex: 60,
-          }}
-        >
-          Converting… when done, press &ldquo;Run C→FJ output&rdquo;
-        </div>,
-        document.body,
-      )}
-
-      {/* Run C→FJ output tip tooltip */}
-      {runC2fjTipPos && createPortal(
-        <div
-          className="fixed text-xs rounded px-2 py-1 shadow-lg pointer-events-none"
-          style={{
-            top: runC2fjTipPos.top,
-            left: runC2fjTipPos.left,
-            background: '#1e1e1e',
-            border: '1px solid #454545',
-            color: '#e8c47a',
-            whiteSpace: 'nowrap',
-            zIndex: 60,
-          }}
-        >
-          💡 For more, search &ldquo;c2fj&rdquo; in the Docs/STL tab
-        </div>,
-        document.body,
       )}
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />

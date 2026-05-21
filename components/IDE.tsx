@@ -543,7 +543,7 @@ export default function IDE() {
                 : s,
             ),
           );
-          addLine('info', '✓ C→FJ ready. Click "Run C Output" in the toolbar to execute.');
+          addLine('info', '✓ C→FJ ready. Click "Run C→FJ output" in the toolbar to execute.');
         } else {
           addLine('error', data.error ?? 'C conversion failed.');
         }

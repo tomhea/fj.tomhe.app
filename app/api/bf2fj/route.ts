@@ -6,6 +6,8 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
+import { sanitizeStderr } from '@/lib/sanitize-stderr';
+
 const execFileAsync = promisify(execFile);
 
 // bf2fj <input.bf> -o <output.fj>
@@ -53,13 +55,13 @@ export async function POST(req: NextRequest) {
       const e = err as { stderr?: string; message?: string };
       return NextResponse.json({
         success: false,
-        error: e.message ?? 'BF conversion failed.',
-        stderr: e.stderr ?? '',
+        error: 'BF conversion failed.',
+        stderr: sanitizeStderr(e.stderr ?? ''),
       });
     }
 
     const fjContent = await readFile(outPath, 'utf8');
-    return NextResponse.json({ success: true, fjContent, stderr });
+    return NextResponse.json({ success: true, fjContent, stderr: sanitizeStderr(stderr) });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: (err as Error).message },

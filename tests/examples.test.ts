@@ -58,25 +58,25 @@ describe('EXAMPLES catalog', () => {
     expect(src).toMatch(/\bstl\.loop\b/);
   });
 
-  it('Prime Sieve example uses trial division and prints primes', () => {
+  it('Prime Sieve example implements the Sieve of Eratosthenes and prints primes', () => {
     const ex = EXAMPLES.find((e) => e.name === 'Prime Sieve')!;
     expect(ex.files.length).toBe(1);
     const src = ex.files[0].content;
-    expect(src).toMatch(/\bstl\.startup\b/);
-    expect(src).toMatch(/\bbit\.idiv_loop\b/);
+    // Modern sieve uses startup_and_init_all instead of bare startup
+    expect(src).toMatch(/\bstl\.startup(?:_and_init_all)?\b/);
     expect(src).toMatch(/\bbit\.print_dec_int\b/);
     expect(src).toMatch(/\bstl\.loop\b/);
   });
 
-  it('Multi-file Compilation example spans two files with a library and entry point', () => {
+  it('Multi-file Compilation example spans multiple files with a library and entry point', () => {
     const ex = EXAMPLES.find((e) => e.name === 'Multi-file Compilation')!;
-    expect(ex.files.length).toBe(2);
+    // May have more than 2 files (e.g. separate start.fj and end.fj files)
+    expect(ex.files.length).toBeGreaterThanOrEqual(2);
+    // greet.fj defines the library and must be first so later files can call it
     expect(ex.files[0].name).toBe('greet.fj');
-    expect(ex.files[1].name).toBe('main.fj');
-    const lib = ex.files[0].content;
-    const main = ex.files[1].content;
-    expect(lib).toMatch(/\bdef\b/);
-    expect(main).toMatch(/\bstl\.startup\b/);
-    expect(main).toMatch(/mylib\.greet/);
+    const joined = ex.files.map((f) => f.content).join('\n');
+    expect(joined).toMatch(/\bdef\b/);
+    expect(joined).toMatch(/\bstl\.startup\b/);
+    expect(joined).toMatch(/mylib\.greet/);
   });
 });

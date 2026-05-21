@@ -12,6 +12,12 @@ interface DocsPanelProps {
 
 export default function DocsPanel({ open, onClose, initialStlSearch }: DocsPanelProps) {
   const [tab, setTab] = useState<'ref' | 'stl'>('ref');
+  const [fullWidth, setFullWidth] = useState(false);
+
+  // Reset full-width when the panel is closed.
+  useEffect(() => {
+    if (!open) setFullWidth(false);
+  }, [open]);
 
   // When opened with an initial STL search term, switch to the STL tab.
   useEffect(() => {
@@ -94,7 +100,7 @@ export default function DocsPanel({ open, onClose, initialStlSearch }: DocsPanel
         // boolean attribute is actually set on the DOM element.
         inert={open ? undefined : true}
         style={{
-          width: 'clamp(400px, 42vw, 700px)',
+          width: fullWidth ? '100dvw' : 'clamp(400px, 42vw, 700px)',
           background: '#1e1e1e',
           borderLeft: '1px solid #3c3c3c',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
@@ -109,6 +115,17 @@ export default function DocsPanel({ open, onClose, initialStlSearch }: DocsPanel
         >
           <span className="font-semibold text-sm" style={{ color: '#cccccc' }}>Docs</span>
           <div className="flex-1" />
+          {/* Full-width toggle — handy on phone landscape to use the whole screen */}
+          <button
+            onClick={() => setFullWidth(w => !w)}
+            title={fullWidth ? 'Restore panel width' : 'Expand to full width'}
+            className="leading-none px-1 rounded transition-colors mr-1"
+            style={{ color: '#888' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ccc'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#888'; }}
+          >
+            {fullWidth ? <RestoreIcon /> : <MaximizeIcon />}
+          </button>
           <button
             onClick={onClose}
             className="text-lg leading-none px-1 rounded transition-colors"
@@ -307,6 +324,22 @@ stl.loop                  // halt`}</Pre>
         </ul>
       </Section>
     </div>
+  );
+}
+
+function MaximizeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M2 2h5M2 2v5M14 2h-5M14 2v5M2 14h5M2 14v-5M14 14h-5M14 14v-5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function RestoreIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M5 2H2v3M2 2l4 4M11 2h3v3M14 2l-4 4M5 14H2v-3M2 14l4-4M11 14h3v-3M14 14l-4-4" strokeLinecap="round" />
+    </svg>
   );
 }
 
