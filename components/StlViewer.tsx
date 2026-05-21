@@ -39,6 +39,9 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
   // Editor ref + pending highlight query (set when a search result is clicked).
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const highlightQueryRef = useRef<string | null>(null);
+  // Set to true when a search is triggered by Ctrl+click so the first result
+  // is automatically opened (unlike normal typing in the search box).
+  const autoSelectRef = useRef(false);
 
   useEffect(() => {
     fetch('/stl-index.json')
@@ -47,11 +50,31 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
       .catch(() => setIndex(null));
   }, []);
 
-  // Update search when a new initial search term arrives (Ctrl+click from editor).
+  // Update search when a new initial search term arrives (Ctrl+click from IDE editor).
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (initialSearch !== undefined) setSearchQuery(initialSearch);
+    if (initialSearch !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSearchQuery(initialSearch);
+      autoSelectRef.current = true;
+    }
   }, [initialSearch]);
+
+  // When a search is triggered by Ctrl+click (autoSelectRef), automatically open
+  // the first matching result.  Runs whenever searchQuery or the index changes so
+  // it also works if the index wasn't loaded yet when the click happened.
+  useEffect(() => {
+    if (!autoSelectRef.current || !index) return;
+    autoSelectRef.current = false;
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return;
+    const firstEntry = index.files.find(f =>
+      f.name.toLowerCase().includes(q) ||
+      f.path.toLowerCase().includes(q) ||
+      (f.content !== undefined && f.content.toLowerCase().includes(q))
+    );
+    if (firstEntry) selectFile(firstEntry, searchQuery.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, index]);
 
   async function selectFile(entry: StlEntry, highlight?: string) {
     highlightQueryRef.current = highlight ?? null;
@@ -331,6 +354,19 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
                       }
                     }, 100);
                   }
+                  // Ctrl+click on a word → search for its definition in the STL.
+                  editor.onMouseDown((e) => {
+                    if (!e.event.ctrlKey && !e.event.metaKey) return;
+                    const pos = e.target.position;
+                    if (!pos) return;
+                    const model = editor.getModel();
+                    if (!model) return;
+                    const wordInfo = model.getWordAtPosition(pos);
+                    if (wordInfo?.word) {
+                      autoSelectRef.current = true;
+                      setSearchQuery(`def ${wordInfo.word}`);
+                    }
+                  });
                 }}
               />
             )}
