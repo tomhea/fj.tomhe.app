@@ -161,14 +161,13 @@ describe('WS security edge cases', () => {
       if (!serverAvailable) return ctx.skip();
       const ws = openWs();
       await new Promise<void>((r) => ws.once('open', () => r()));
+      // The socket is already open at this point — send immediately rather
+      // than re-registering ws.on('open') which would never fire again.
+      const junk = Buffer.from('not-a-real-fjm-binary-XXXXXXXX').toString('base64');
+      ws.send(JSON.stringify({ type: 'run_fjm', fjmBase64: junk }));
       const events = await new Promise<Evt[]>((resolve) => {
         const collected: Evt[] = [];
         const timer = setTimeout(() => resolve(collected), 8_000);
-        ws.on('open', () => {
-          // Send invalid FJM: just random bytes base64-encoded
-          const junk = Buffer.from('not-a-real-fjm-binary-XXXXXXXX').toString('base64');
-          ws.send(JSON.stringify({ type: 'run_fjm', fjmBase64: junk }));
-        });
         ws.on('message', (raw) => {
           const e = JSON.parse(raw.toString()) as Evt;
           collected.push(e);

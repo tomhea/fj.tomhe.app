@@ -274,8 +274,16 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
         proc.stdin.write(msg.stdin);
       }
     } else if (msg.type === 'kill') {
-      cleanup();
-      send({ type: 'exit', code: null, signal: 'SIGKILL' });
+      if (!proc) {
+        // No process is running; send a synthetic exit so the client's
+        // kill/exit handshake completes without hanging.
+        send({ type: 'exit', code: null, signal: null });
+      } else {
+        // Kill the running process.  child.on('close') will emit the exit
+        // event once the OS confirms termination — prevents a double-exit
+        // race where cleanup() + the close handler both send 'exit'.
+        cleanup();
+      }
     }
   });
 
