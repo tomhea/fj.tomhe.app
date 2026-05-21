@@ -161,9 +161,13 @@ function registerFlipJumpLanguage(monaco: MonacoInstance) {
         [/[A-Za-z_]\w*(?=\s*=)/, 'variable.constant'],
 
         // Macro calls: the FIRST identifier on a line (after optional leading whitespace).
-        // The `^` anchor restricts this rule to position 0 of the line (Monarch semantics);
-        // the leading whitespace is consumed as an unstyled capture group so argument
-        // identifiers later on the same line never match this rule.
+        // NOTE on `^`: Monarch's `^` is a *line-start guard*, not a standard JS regex
+        // anchor.  The engine evaluates rules that begin with `^` ONLY when the
+        // tokenizer is at position 0 of the line; they are skipped entirely once any
+        // character has been consumed.  This is what prevents argument identifiers
+        // later on the same line from ever being coloured as macro calls.
+        // Leading whitespace is absorbed by capture group 1 (token ''), so the
+        // identifier in group 2 still starts at an arbitrary column.
         // Keywords, types, and directives are excluded via a negative lookahead.
         // Examples matched: stl.output_char 'H', bit.add w, a, b, stl.loop, .startup, myMacro
         [/^([ \t]*)((?!(?:def|ns|rep|pad|reserve|segment|wflip|dbit|dw|w)\b)[A-Za-z_.][\w.]*(?=[ \t]+[^;\s\/]|[ \t]*(?:\/\/|$)))/, ['', 'macro.call']],

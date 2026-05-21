@@ -8,9 +8,12 @@ interface DocsPanelProps {
   onClose: () => void;
   /** When set, the panel opens to the STL tab with this pre-filled search query. */
   initialStlSearch?: string;
+  /** Incremented by IDE on every Ctrl+click so StlViewer re-arms auto-select even
+   *  when the query string hasn't changed (same word clicked twice). */
+  initialStlSearchTick?: number;
 }
 
-export default function DocsPanel({ open, onClose, initialStlSearch }: DocsPanelProps) {
+export default function DocsPanel({ open, onClose, initialStlSearch, initialStlSearchTick }: DocsPanelProps) {
   const [tab, setTab] = useState<'ref' | 'stl'>('ref');
   const [fullWidth, setFullWidth] = useState(false);
 
@@ -161,7 +164,7 @@ export default function DocsPanel({ open, onClose, initialStlSearch }: DocsPanel
         {/* Content */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {tab === 'ref' && <FJReference />}
-          {tab === 'stl' && <StlViewer initialSearch={open ? initialStlSearch : undefined} />}
+          {tab === 'stl' && <StlViewer initialSearch={open ? initialStlSearch : undefined} searchTick={open ? initialStlSearchTick : undefined} />}
         </div>
       </div>
     </>

@@ -126,6 +126,7 @@ export default function IDE() {
   const [markers, setMarkers] = useState<MonacoMarker[]>([]);
   const [docsOpen, setDocsOpen] = useState(false);
   const [stlSearch, setStlSearch] = useState<string | undefined>(undefined);
+  const [stlSearchTick, setStlSearchTick] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => loadFromLocalStorage<boolean>('fj-ide-sidebar-collapsed') ?? false,
   );
@@ -851,6 +852,7 @@ export default function IDE() {
               onCtrlClick={(word) => {
                 // Search for the macro definition so the STL viewer jumps to `def <word>`.
                 setStlSearch(`def ${word}`);
+                setStlSearchTick(t => t + 1); // always increments so repeated clicks re-arm auto-select
                 setDocsOpen(true);
               }}
             />
@@ -905,7 +907,7 @@ export default function IDE() {
         />
       </nav>
 
-      <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} initialStlSearch={stlSearch} />
+      <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} initialStlSearch={stlSearch} initialStlSearchTick={stlSearchTick} />
     </div>
   );
 }

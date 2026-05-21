@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import type { OnMount } from '@monaco-editor/react';
 import { marked } from 'marked';
@@ -26,7 +26,7 @@ function languageForStl(name: string): string {
   return 'flipjump';
 }
 
-export default function StlViewer({ initialSearch }: { initialSearch?: string }) {
+export default function StlViewer({ initialSearch, searchTick }: { initialSearch?: string; searchTick?: number }) {
   // undefined = still loading, null = failed to load, StlIndex = loaded
   const [index, setIndex] = useState<StlIndex | null | undefined>(undefined);
   const [selected, setSelected] = useState<StlEntry | null>(null);
@@ -39,44 +39,19 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
   // Editor ref + pending highlight query (set when a search result is clicked).
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const highlightQueryRef = useRef<string | null>(null);
-  // Set to true when a search is triggered by Ctrl+click so the first result
-  // is automatically opened (unlike normal typing in the search box).
-  const autoSelectRef = useRef(false);
+  // Stores the lowercased query that should trigger an auto-select on the next
+  // effect run.  Using the query string (not a boolean) prevents stale selections
+  // if the user manually changes the search box while the index is still loading.
+  const autoSelectQueryRef = useRef<string | null>(null);
+  // Incrementing this forces the auto-select effect to re-run even when
+  // searchQuery already holds the desired value (handles repeated Ctrl+click on
+  // the same word without navigating away in between).
+  const [autoSelectTick, setAutoSelectTick] = useState(0);
 
-  useEffect(() => {
-    fetch('/stl-index.json')
-      .then(r => r.ok ? r.json() : null)
-      .then((data: StlIndex | null) => setIndex(data))
-      .catch(() => setIndex(null));
-  }, []);
-
-  // Update search when a new initial search term arrives (Ctrl+click from IDE editor).
-  useEffect(() => {
-    if (initialSearch !== undefined) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSearchQuery(initialSearch);
-      autoSelectRef.current = true;
-    }
-  }, [initialSearch]);
-
-  // When a search is triggered by Ctrl+click (autoSelectRef), automatically open
-  // the first matching result.  Runs whenever searchQuery or the index changes so
-  // it also works if the index wasn't loaded yet when the click happened.
-  useEffect(() => {
-    if (!autoSelectRef.current || !index) return;
-    autoSelectRef.current = false;
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return;
-    const firstEntry = index.files.find(f =>
-      f.name.toLowerCase().includes(q) ||
-      f.path.toLowerCase().includes(q) ||
-      (f.content !== undefined && f.content.toLowerCase().includes(q))
-    );
-    if (firstEntry) selectFile(firstEntry, searchQuery.trim());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, index]);
-
-  async function selectFile(entry: StlEntry, highlight?: string) {
+  // selectFile is memoised so it can be listed in useEffect dependency arrays
+  // without suppressing exhaustive-deps warnings.  All its dependencies are
+  // stable React state setters or refs, so the memo never invalidates.
+  const selectFile = useCallback(async (entry: StlEntry, highlight?: string) => {
     highlightQueryRef.current = highlight ?? null;
     editorRef.current = null; // will be refreshed by onMount for the new key
     setSelected(entry);
@@ -94,7 +69,45 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
     } finally {
       setLoading(false);
     }
-  }
+  }, []); // deps are all stable state setters / refs
+
+  useEffect(() => {
+    fetch('/stl-index.json')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: StlIndex | null) => setIndex(data))
+      .catch(() => setIndex(null));
+  }, []);
+
+  // Update search when a new initial search term arrives (Ctrl+click from IDE editor).
+  // `searchTick` is included so the effect re-fires — and re-arms auto-select — even
+  // when the query string hasn't changed (user Ctrl+clicks the same word twice).
+  useEffect(() => {
+    if (initialSearch !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSearchQuery(initialSearch);
+      autoSelectQueryRef.current = initialSearch.trim().toLowerCase();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAutoSelectTick(t => t + 1);
+    }
+  }, [initialSearch, searchTick]);
+
+  // When a search is triggered by Ctrl+click, automatically open the first
+  // matching result.  Runs whenever searchQuery, the index, or the tick changes
+  // so it also handles: index not loaded yet; same-query repeated clicks.
+  // Guards against stale auto-selects: if the user typed something else in the
+  // search box the stored query won't match searchQuery and the select is skipped.
+  useEffect(() => {
+    const pending = autoSelectQueryRef.current;
+    if (!pending || !index) return;
+    if (searchQuery.trim().toLowerCase() !== pending) return;
+    autoSelectQueryRef.current = null;
+    const firstEntry = index.files.find(f =>
+      f.name.toLowerCase().includes(pending) ||
+      f.path.toLowerCase().includes(pending) ||
+      (f.content !== undefined && f.content.toLowerCase().includes(pending))
+    );
+    if (firstEntry) selectFile(firstEntry, searchQuery.trim());
+  }, [searchQuery, index, autoSelectTick, selectFile]);
 
   // After content loads (loading → false), attempt to highlight the pending
   // search query in the Monaco editor.  Monaco renders only when !loading,
@@ -363,8 +376,10 @@ export default function StlViewer({ initialSearch }: { initialSearch?: string })
                     if (!model) return;
                     const wordInfo = model.getWordAtPosition(pos);
                     if (wordInfo?.word) {
-                      autoSelectRef.current = true;
-                      setSearchQuery(`def ${wordInfo.word}`);
+                      const newQuery = `def ${wordInfo.word}`;
+                      autoSelectQueryRef.current = newQuery.trim().toLowerCase();
+                      setAutoSelectTick(t => t + 1);
+                      setSearchQuery(newQuery);
                     }
                   });
                 }}
