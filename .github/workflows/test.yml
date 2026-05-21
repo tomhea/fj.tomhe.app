@@ -30,6 +30,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install flipjump (provides fj; bf2fj is optional)
         run: |
@@ -74,6 +75,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install flipjump (for the dev server's fj invocation)
         run: |
@@ -83,6 +85,13 @@ jobs:
 
       - name: Install npm deps
         run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-
 
       - name: Install Playwright browsers
         # `with-deps` brings in system libraries Chromium needs on Ubuntu.

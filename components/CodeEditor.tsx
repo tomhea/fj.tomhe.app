@@ -4,6 +4,14 @@ import { useEffect, useRef } from 'react';
 import { FJFile, MonacoMarker } from '@/lib/types';
 import dynamic from 'next/dynamic';
 import type { OnMount } from '@monaco-editor/react';
+import { loader } from '@monaco-editor/react';
+
+// Self-host Monaco: use the prebuilt min/vs files copied to public/monaco-vs
+// by scripts/copy-monaco.js (runs after npm install).  This avoids a runtime
+// CDN fetch to cdn.jsdelivr.net, which is unreliable in CI and offline builds.
+// The public/monaco-vs/ directory is gitignored; it is regenerated on every
+// `npm install` / `npm ci` via the postinstall hook.
+loader.config({ paths: { vs: '/monaco-vs' } });
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 

@@ -71,5 +71,8 @@ export function middleware(_req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|stl/).*)'],
+  // Exclude: Next.js internals, static image optimiser, favicon, the STL
+  // browser endpoint, and the self-hosted Monaco min/vs bundle (large static
+  // assets that don't need security headers added per-request).
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|stl/|monaco-vs/).*)'],
 };
