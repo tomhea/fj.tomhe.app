@@ -46,6 +46,15 @@ const API_RATE_LIMIT = parseInt(process.env.API_RATE_LIMIT ?? '20', 10);
 const API_RATE_WINDOW_MS = 60_000;
 const apiRateLimiter = new Map<string, { count: number; reset: number }>();
 
+// Evict stale rate-limit entries every 5 minutes. Without this, a unique-IP
+// flood leaves one Map entry per source address and grows until OOM.
+const _rateLimiterSweep = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of apiRateLimiter) {
+    if (now > entry.reset) apiRateLimiter.delete(ip);
+  }
+}, 5 * 60_000).unref();
+
 function checkApiRateLimit(ip: string): boolean {
   const now = Date.now();
   let entry = apiRateLimiter.get(ip);
