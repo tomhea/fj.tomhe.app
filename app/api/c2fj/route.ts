@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { writeFile, readFile, mkdir, rm } from 'fs/promises';
@@ -20,6 +20,8 @@ const TIMEOUT_MS = 120_000;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // compressed
 const MAX_DECOMPRESSED_TOTAL = 30 * 1024 * 1024;
 const MAX_DECOMPRESSED_ENTRY = 5 * 1024 * 1024;
+// Content-Length ceiling — multipart envelope overhead on top of the 10 MB file limit.
+const MAX_BODY_BYTES = MAX_UPLOAD_BYTES + 256 * 1024;
 
 const ALLOWED_C_EXTENSIONS = /\.(c|h|cpp|hpp|cc|hh|cxx|hxx|s|asm)$/i;
 
@@ -47,6 +49,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Expected multipart/form-data.' },
         { status: 400 },
+      );
+    }
+
+    const cl = parseInt(req.headers.get('content-length') ?? '0', 10);
+    if (!isNaN(cl) && cl > MAX_BODY_BYTES) {
+      return NextResponse.json(
+        { success: false, error: 'Request too large.' },
+        { status: 413 },
+      );
+    }
+
+    if (!acquireJob()) {
+      return NextResponse.json(
+        { success: false, error: 'Server busy. Try again shortly.' },
+        { status: 503 },
       );
     }
 
@@ -196,6 +213,7 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   } finally {
+    releaseJob();
     if (tempDir) rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }

@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
 import { execSync } from 'child_process';
 import { POST } from '@/app/api/compile/route';

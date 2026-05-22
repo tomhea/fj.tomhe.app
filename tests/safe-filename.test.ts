@@ -4,8 +4,8 @@ import { isSafeFilename, isSafeCFilename } from '@/lib/safe-filename';
 describe('isSafeFilename', () => {
   const cases: Array<[string, boolean]> = [
     ['main.fj', true],
-    ['my-file.fj', true],
-    ['my file.fj', true],
+    ['my-file.fj', false],  // dashes not allowed
+    ['my file.fj', false],  // spaces not allowed
     ['my.lib.fj', true],
     ['Main.FJ', true], // case-insensitive ext
     ['file_42.fj', true],

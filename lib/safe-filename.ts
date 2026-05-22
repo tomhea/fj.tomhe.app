@@ -4,7 +4,7 @@
 // Must end with .fj (case-insensitive). No `..` segments. No Windows reserved names.
 const SAFE_FJ_NAME = /^[\w][\w.]*\.fj$/i;
 // Windows reserved device names (harmless on Linux, blocked for portability).
-const WIN_RESERVED = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])\./i;
+const WIN_RESERVED = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\./i;
 
 export function isSafeFilename(name: string): boolean {
   return SAFE_FJ_NAME.test(name) && !name.includes('..') && !WIN_RESERVED.test(name);

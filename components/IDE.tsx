@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -356,7 +356,7 @@ export default function IDE() {
     try {
       const res = await fetch('/api/compile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify({
           files: files.map((f) => ({ name: f.name, content: f.content })),
         }),
@@ -474,7 +474,7 @@ export default function IDE() {
       try {
         const res = await fetch('/api/bf2fj', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
           body: JSON.stringify({ content }),
           signal: ctrl.signal,
         });

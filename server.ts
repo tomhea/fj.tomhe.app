@@ -1,4 +1,4 @@
-﻿import { createServer, IncomingMessage } from 'http';
+import { createServer, IncomingMessage } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
