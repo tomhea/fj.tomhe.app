@@ -21,6 +21,9 @@ const MAX_FILES = 20;
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 const MAX_STDIN_BYTES = 1 * 1024 * 1024;
+// Cumulative stdin cap per connection — prevents a long-lived run being
+// flooded with 1 MB chunks until memory is exhausted.
+const MAX_STDIN_TOTAL_BYTES = 64 * 1024 * 1024;
 const RUN_TIMEOUT_MS = 5 * 60 * 1000;
 const KILL_GRACE_MS = 2_000;
 const WS_MAX_PAYLOAD = 4 * 1024 * 1024;
@@ -37,17 +40,41 @@ const MAX_TOTAL_CONNECTIONS = parseInt(
   10,
 );
 
+// REST API rate limit — per IP, sliding window. Overridable via env.
+// Applies to all /api/* routes before Next.js handles them.
+const API_RATE_LIMIT = parseInt(process.env.API_RATE_LIMIT ?? '20', 10);
+const API_RATE_WINDOW_MS = 60_000;
+const apiRateLimiter = new Map<string, { count: number; reset: number }>();
+
+function checkApiRateLimit(ip: string): boolean {
+  const now = Date.now();
+  let entry = apiRateLimiter.get(ip);
+  if (!entry || now > entry.reset) {
+    entry = { count: 0, reset: now + API_RATE_WINDOW_MS };
+    apiRateLimiter.set(ip, entry);
+  }
+  if (entry.count >= API_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 // In-memory connection accounting. Process-local — when running behind
 // multiple workers, an external store (Redis) would be needed instead.
 const perIpConnections = new Map<string, number>();
 let totalConnections = 0;
 
+// Set TRUST_PROXY=1 when running behind a reverse proxy that strips and
+// re-adds X-Forwarded-For. Without it, XFF is ignored and the socket
+// address is used — prevents per-IP limits from being bypassed by
+// spoofing the header on a direct-to-internet deployment.
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+
 function clientIp(req: IncomingMessage): string {
-  // Behind a reverse proxy, the real client is in X-Forwarded-For. We trust
-  // the leftmost entry; ops must set the proxy to drop client-supplied XFF.
-  const xff = req.headers['x-forwarded-for'];
-  if (typeof xff === 'string' && xff.length > 0) {
-    return xff.split(',')[0].trim();
+  if (TRUST_PROXY) {
+    const xff = req.headers['x-forwarded-for'];
+    if (typeof xff === 'string' && xff.length > 0) {
+      return xff.split(',')[0].trim();
+    }
   }
   return req.socket.remoteAddress ?? 'unknown';
 }
@@ -96,6 +123,7 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
   let tempDir: string | null = null;
   let runTimeout: NodeJS.Timeout | null = null;
   let killTimeout: NodeJS.Timeout | null = null;
+  let stdinBytesTotal = 0;
 
   function send(msg: ServerMsg): void {
     if (ws.readyState === WebSocket.OPEN) {
@@ -266,8 +294,16 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
         send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
       }
     } else if (msg.type === 'stdin') {
-      if (Buffer.byteLength(msg.stdin) > MAX_STDIN_BYTES) {
+      const chunkBytes = Buffer.byteLength(msg.stdin);
+      if (chunkBytes > MAX_STDIN_BYTES) {
         send({ type: 'error', data: 'Stdin chunk too large.' });
+        return;
+      }
+      stdinBytesTotal += chunkBytes;
+      if (stdinBytesTotal > MAX_STDIN_TOTAL_BYTES) {
+        send({ type: 'error', data: 'Total stdin limit exceeded.' });
+        cleanup();
+        ws.close();
         return;
       }
       if (proc?.stdin?.writable) {
@@ -306,7 +342,16 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const httpServer = createServer((req, res) => {
-    handle(req, res, parse(req.url!, true));
+    const url = parse(req.url!, true);
+    if (url.pathname?.startsWith('/api/')) {
+      const ip = clientIp(req);
+      if (!checkApiRateLimit(ip)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Too many requests.' }));
+        return;
+      }
+    }
+    handle(req, res, url);
   });
 
   const wss = new WebSocketServer({

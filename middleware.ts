@@ -4,30 +4,24 @@ import type { NextRequest } from 'next/server';
 /**
  * Security headers — applied to every response.
  *
- * Production CSP is strict: same-origin scripts + the jsdelivr CDN that
- * `@monaco-editor/react` loads `vs/loader.js` from. Allowing jsdelivr is
- * the pragmatic choice for shipping today; self-hosting Monaco
- * (`monaco-editor` package + `loader.config({ paths: { vs: '/monaco/vs' } })`)
- * would remove the third-party origin entirely and is tracked as a
- * post-deploy follow-up.
+ * Monaco is self-hosted: `scripts/copy-monaco.js` copies `monaco-editor/min/vs`
+ * into `public/monaco-vs/` at install time, and `CodeEditor.tsx` points the AMD
+ * loader at `/monaco-vs` via `loader.config({ paths: { vs: '/monaco-vs' } })`.
+ * No CDN allowances are needed in CSP.
  *
- * Development CSP also includes `'unsafe-eval'` because Next.js's HMR /
- * webpack runtime loads chunks via `eval()` / `new Function()`. Without
- * that, dynamic imports (including the IDE's `dynamic({ ssr: false })`)
- * silently hang at the loading fallback.
+ * Development CSP includes `'unsafe-eval'` because Next.js's HMR / webpack
+ * runtime loads chunks via `eval()` / `new Function()`. Without it, dynamic
+ * imports (including the IDE's `dynamic({ ssr: false })`) silently hang.
  *
- * `'unsafe-inline'` for style-src is required by Monaco in both modes —
- * it sets inline style attributes for syntax highlighting at runtime.
+ * `'unsafe-inline'` for style-src is required by Monaco — it sets inline style
+ * attributes for syntax highlighting at runtime.
+ * `'unsafe-inline'` for script-src is required by Next.js's bootstrap inline
+ * scripts. Tracked for removal via nonce-based CSP.
  *
- * `connect-src` includes `ws:`/`wss:` for the runner WebSocket; deploys
- * at a different host can extend via $ALLOWED_ORIGINS.
+ * `connect-src` includes `ws:`/`wss:` for the runner WebSocket; deploys at a
+ * different host can extend via $ALLOWED_ORIGINS.
  */
 const isProd = process.env.NODE_ENV === 'production';
-
-// Single source of truth for the Monaco-loader CDN. If you self-host
-// Monaco (see header comment), drop this constant and the corresponding
-// entries in script-src / connect-src.
-const MONACO_CDN = 'https://cdn.jsdelivr.net';
 
 const ALLOWED_CONNECT = (process.env.ALLOWED_ORIGINS ?? '')
   .split(',')
@@ -37,16 +31,16 @@ const ALLOWED_CONNECT = (process.env.ALLOWED_ORIGINS ?? '')
   .join(' ');
 
 const SCRIPT_SRC = isProd
-  ? `script-src 'self' 'unsafe-inline' ${MONACO_CDN}`
-  : `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${MONACO_CDN}`;
+  ? `script-src 'self' 'unsafe-inline'`
+  : `script-src 'self' 'unsafe-inline' 'unsafe-eval'`;
 
 const CSP = [
   "default-src 'self'",
   SCRIPT_SRC,
-  `style-src 'self' 'unsafe-inline' ${MONACO_CDN}`,
+  "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  `font-src 'self' data: ${MONACO_CDN}`,
-  `connect-src 'self' ws: wss: ${MONACO_CDN} https://spoo.me ${ALLOWED_CONNECT}`.trim(),
+  "font-src 'self' data:",
+  `connect-src 'self' ws: wss: https://spoo.me ${ALLOWED_CONNECT}`.trim(),
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import type { OnMount } from '@monaco-editor/react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
@@ -395,21 +396,20 @@ export default function StlViewer({ initialSearch, searchTick }: { initialSearch
   );
 }
 
-/** Renders a markdown README.md as formatted HTML using marked. */
+/** Renders a markdown README.md as formatted HTML using marked + DOMPurify. */
 function MarkdownPane({ content }: { content: string }) {
   const html = useMemo(() => {
     try {
-      return marked.parse(content, { async: false }) as string;
+      const raw = marked.parse(content, { async: false }) as string;
+      return DOMPurify.sanitize(raw);
     } catch {
-      return `<pre>${content}</pre>`;
+      return `<pre>${content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
     }
   }, [content]);
 
   return (
     <div
       className="stl-markdown flex-1 overflow-y-auto px-5 py-4"
-      // dangerouslySetInnerHTML is safe here: this content comes from the
-      // FlipJump STL repository (a known-good source), not user input.
       dangerouslySetInnerHTML={{ __html: html }}
       style={{ color: '#cccccc', lineHeight: 1.7, fontSize: 13 }}
     />

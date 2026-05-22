@@ -32,6 +32,15 @@ export async function POST(req: NextRequest) {
   let tempDir: string | null = null;
 
   try {
+    // Require a non-simple header so browsers send a CORS preflight for
+    // cross-origin requests — this prevents CSRF form submissions.
+    if (!req.headers.get('x-requested-with')) {
+      return NextResponse.json(
+        { success: false, error: 'Missing X-Requested-With header.' },
+        { status: 400 },
+      );
+    }
+
     const contentType = req.headers.get('content-type') ?? '';
     if (!contentType.includes('multipart/form-data')) {
       return NextResponse.json(
@@ -92,9 +101,12 @@ export async function POST(req: NextRequest) {
         const destReal = resolve(destPath);
         if (!destReal.startsWith(srcDirReal)) continue;
 
-        const uncompressed = entry.header.size;
-        if (uncompressed > MAX_DECOMPRESSED_ENTRY) continue;
-        totalExtracted += uncompressed;
+        // Decompress first, then check actual size — zip central-directory
+        // headers are attacker-controlled and can be forged to claim 0 bytes
+        // while decompressing to gigabytes.
+        const data = entry.getData();
+        if (data.byteLength > MAX_DECOMPRESSED_ENTRY) continue;
+        totalExtracted += data.byteLength;
         if (totalExtracted > MAX_DECOMPRESSED_TOTAL) {
           return NextResponse.json(
             { success: false, error: 'Archive too large when uncompressed.' },
@@ -103,7 +115,7 @@ export async function POST(req: NextRequest) {
         }
 
         await mkdir(dirname(destPath), { recursive: true });
-        await writeFile(destPath, entry.getData());
+        await writeFile(destPath, data);
         extracted++;
       }
 

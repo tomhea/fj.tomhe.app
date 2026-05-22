@@ -48,6 +48,8 @@ Environment variables (see `.env.example`):
 | `PORT` | `3000` | HTTP listen port |
 | `HOSTNAME` | `localhost` | HTTP listen address |
 | `ALLOWED_ORIGINS` | (localhost + `https://fj.tomhe.app`) | Comma-separated WebSocket origin allowlist |
+| `TRUST_PROXY` | _(unset)_ | Set to `1` when behind a reverse proxy that owns `X-Forwarded-For` |
+| `API_RATE_LIMIT` | `20` | Max REST API requests per IP per 60 s window |
 | `FJ_CMD` | `fj` | Path to the `fj` binary |
 | `BF2FJ_CMD` | `bf2fj` | Path to the `bf2fj` binary |
 | `C2FJ_CMD` | `c2fj` | Path to the `c2fj` binary |

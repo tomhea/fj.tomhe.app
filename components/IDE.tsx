@@ -531,6 +531,7 @@ export default function IDE() {
       try {
         const res = await fetch('/api/c2fj', {
           method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
           body: formData,
           signal: ctrl.signal,
         });
