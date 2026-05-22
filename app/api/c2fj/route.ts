@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import AdmZip from 'adm-zip';
 import { isSafeCFilename } from '@/lib/safe-filename';
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
+import { acquireJob, releaseJob } from '@/lib/concurrency';
 
 const execFileAsync = promisify(execFile);
 
@@ -19,6 +20,8 @@ const TIMEOUT_MS = 120_000;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // compressed
 const MAX_DECOMPRESSED_TOTAL = 30 * 1024 * 1024;
 const MAX_DECOMPRESSED_ENTRY = 5 * 1024 * 1024;
+// Content-Length ceiling — multipart envelope overhead on top of the 10 MB file limit.
+const MAX_BODY_BYTES = MAX_UPLOAD_BYTES + 256 * 1024;
 
 const ALLOWED_C_EXTENSIONS = /\.(c|h|cpp|hpp|cc|hh|cxx|hxx|s|asm)$/i;
 
@@ -29,26 +32,41 @@ export const runtime = 'nodejs';
 export const maxDuration = 150;
 
 export async function POST(req: NextRequest) {
+  // Cheap guards — return early without entering the try/finally,
+  // so releaseJob() only runs when acquireJob() succeeded.
+  if (!req.headers.get('x-requested-with')) {
+    return NextResponse.json(
+      { success: false, error: 'Missing X-Requested-With header.' },
+      { status: 400 },
+    );
+  }
+
+  const contentType = req.headers.get('content-type') ?? '';
+  if (!contentType.includes('multipart/form-data')) {
+    return NextResponse.json(
+      { success: false, error: 'Expected multipart/form-data.' },
+      { status: 400 },
+    );
+  }
+
+  const cl = parseInt(req.headers.get('content-length') ?? '0', 10);
+  if (!isNaN(cl) && cl > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { success: false, error: 'Request too large.' },
+      { status: 413 },
+    );
+  }
+
+  if (!acquireJob()) {
+    return NextResponse.json(
+      { success: false, error: 'Server busy. Try again shortly.' },
+      { status: 503 },
+    );
+  }
+
   let tempDir: string | null = null;
 
   try {
-    // Require a non-simple header so browsers send a CORS preflight for
-    // cross-origin requests — this prevents CSRF form submissions.
-    if (!req.headers.get('x-requested-with')) {
-      return NextResponse.json(
-        { success: false, error: 'Missing X-Requested-With header.' },
-        { status: 400 },
-      );
-    }
-
-    const contentType = req.headers.get('content-type') ?? '';
-    if (!contentType.includes('multipart/form-data')) {
-      return NextResponse.json(
-        { success: false, error: 'Expected multipart/form-data.' },
-        { status: 400 },
-      );
-    }
-
     const formData = await req.formData();
     const uploadedFile = formData.get('file') as File | null;
     if (!uploadedFile) {
@@ -101,10 +119,19 @@ export async function POST(req: NextRequest) {
         const destReal = resolve(destPath);
         if (!destReal.startsWith(srcDirReal)) continue;
 
-        // Decompress first, then check actual size — zip central-directory
-        // headers are attacker-controlled and can be forged to claim 0 bytes
-        // while decompressing to gigabytes.
-        const data = entry.getData();
+        // Fast reject using the header's declared size — attacker-controlled but
+        // catches honest oversized entries before we attempt decompression.
+        if (entry.header.size > MAX_DECOMPRESSED_ENTRY) continue;
+
+        // Decompress and verify actual size — the header can be forged to claim
+        // 0 bytes while decompressing to gigabytes (zip bomb). Wrap in try/catch
+        // so an OOM or zlib error on a malformed entry skips it cleanly.
+        let data: Buffer;
+        try {
+          data = entry.getData();
+        } catch {
+          continue;
+        }
         if (data.byteLength > MAX_DECOMPRESSED_ENTRY) continue;
         totalExtracted += data.byteLength;
         if (totalExtracted > MAX_DECOMPRESSED_TOTAL) {
@@ -186,6 +213,7 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   } finally {
+    releaseJob();
     if (tempDir) rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }

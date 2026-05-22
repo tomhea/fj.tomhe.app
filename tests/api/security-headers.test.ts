@@ -60,6 +60,17 @@ describe('security headers (middleware)', () => {
     expect(csp).toContain("'unsafe-eval'");
   });
 
+  it('sets Cache-Control: no-store on /api/* responses (G3)', () => {
+    expect(callMiddleware('http://localhost/api/compile').headers.get('Cache-Control')).toBe('no-store');
+    expect(callMiddleware('http://localhost/api/bf2fj').headers.get('Cache-Control')).toBe('no-store');
+    expect(callMiddleware('http://localhost/api/c2fj').headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('does not force Cache-Control on non-API paths (G3)', () => {
+    const r = callMiddleware('http://localhost/');
+    expect(r.headers.get('Cache-Control')).not.toBe('no-store');
+  });
+
   it('production CSP does not include unsafe-eval', async () => {
     // isProd is a module-level constant evaluated at import time.
     // Stub the env FIRST so the value is set before the module initialises,

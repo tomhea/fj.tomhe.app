@@ -4,6 +4,8 @@ import type { NextConfig } from 'next';
 // `output: 'standalone'` would generate its own server.js which conflicts
 // with that, and the rsync deploy workflow doesn't use standalone output
 // anyway. So we run with the default output mode.
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  poweredByHeader: false,
+};
 
 export default nextConfig;

@@ -4,8 +4,8 @@ import { isSafeFilename, isSafeCFilename } from '@/lib/safe-filename';
 describe('isSafeFilename', () => {
   const cases: Array<[string, boolean]> = [
     ['main.fj', true],
-    ['my-file.fj', true],
-    ['my file.fj', true],
+    ['my-file.fj', false],  // dashes not allowed
+    ['my file.fj', false],  // spaces not allowed
     ['my.lib.fj', true],
     ['Main.FJ', true], // case-insensitive ext
     ['file_42.fj', true],
@@ -28,6 +28,18 @@ describe('isSafeFilename', () => {
     ['foo.fj.txt', false],
     ['foo.txt', false],
     ['foo', false],
+    // WIN_RESERVED: blocked for isSafeFilename
+    ['CON.fj', false],
+    ['nul.fj', false],
+    ['com1.fj', false],
+    ['LPT9.fj', false],
+    ['PRN.txt.fj', false],
+    // WIN_RESERVED lookalikes that must still pass
+    ['prnter.fj', true],
+    ['conscript.fj', true],
+    ['aCON.fj', true],
+    ['com0.fj', true],    // COM0 is not a Windows reserved name
+    ['lpt0.fj', true],    // LPT0 is not a Windows reserved name
   ];
 
   for (const [name, expected] of cases) {
@@ -52,6 +64,17 @@ describe('isSafeCFilename', () => {
     ['main.txt', false],
     ['', false],
     ['.c', false],
+    // WIN_RESERVED cases
+    ['CON.c', false],
+    ['nul.cpp', false],
+    ['COM1.h', false],
+    ['LPT9.cc', false],
+    ['PRN.cxx', false],
+    ['conscript.c', true],   // not reserved — 'con' is just a prefix
+    ['console.cpp', true],   // not reserved
+    ['aCON.c', true],        // doesn't start with CON
+    ['com0.c', true],        // COM0 is not a Windows reserved name
+    ['lpt0.h', true],        // LPT0 is not a Windows reserved name
   ];
 
   for (const [name, expected] of cases) {

@@ -218,11 +218,16 @@ export default function Toolbar({
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
 
-      {/* FJ file import — also accepts a project .zip (files_order.txt + .fj files) */}
-      <input ref={fjInputRef} type="file" accept=".fj,.zip" multiple className="hidden" onChange={handleFjUpload} />
-      <ToolBtn onClick={() => fjInputRef.current?.click()} title="Import .fj files or a project .zip">
-        <FolderOpenIcon /> Import FJ
+      {/* Run FJ */}
+      <ToolBtn
+        onClick={isRunning ? onKill : onRunFj}
+        title={isRunning ? 'Kill process' : 'Compile and run FJ online'}
+        accent={isRunning}
+      >
+        {isRunning ? <StopIcon /> : <PlayIcon />}
+        {isRunning ? 'Kill' : 'Run FJ'}
       </ToolBtn>
+
 
       {/* Examples dropdown — panel is portalled to <body> so the toolbar's
           overflow-x-auto scroll container cannot clip it. */}
@@ -266,6 +271,15 @@ export default function Toolbar({
         )}
       </div>
 
+
+      <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
+
+      {/* FJ file import — also accepts a project .zip (files_order.txt + .fj files) */}
+      <input ref={fjInputRef} type="file" accept=".fj,.zip" multiple className="hidden" onChange={handleFjUpload} />
+      <ToolBtn onClick={() => fjInputRef.current?.click()} title="Import .fj files or a project .zip">
+        <FolderOpenIcon /> Import FJ
+      </ToolBtn>
+
       {/* Compile */}
       <ToolBtn onClick={onCompile} disabled={isCompiling || isRunning} title="Compile FJ → FJM">
         {isCompiling
@@ -289,19 +303,6 @@ export default function Toolbar({
       <ToolBtn onClick={() => fjmInputRef.current?.click()} title="Upload a compiled .fjm binary to run">
         <UploadIcon /> Upload FJM
       </ToolBtn>
-
-      <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
-
-      {/* Run FJ */}
-      <ToolBtn
-        onClick={isRunning ? onKill : onRunFj}
-        title={isRunning ? 'Kill process' : 'Compile and run FJ online'}
-        accent={isRunning}
-      >
-        {isRunning ? <StopIcon /> : <PlayIcon />}
-        {isRunning ? 'Kill' : 'Run FJ'}
-      </ToolBtn>
-
       {/* Run FJM */}
       {compiledFjm && !isRunning && (
         <ToolBtn onClick={onRunFjm} title="Run compiled FJM online">

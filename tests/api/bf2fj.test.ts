@@ -18,7 +18,7 @@ const bf2fjAvailable = (() => {
 function makeReq(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/bf2fj', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
     body: JSON.stringify(body),
   });
 }
@@ -30,6 +30,31 @@ async function call(body: unknown) {
 
 describe('POST /api/bf2fj', () => {
   describe('validation', () => {
+    it('rejects request missing X-Requested-With (CSRF guard)', async () => {
+      const req = new NextRequest('http://localhost/api/bf2fj', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: '+' }),
+      });
+      const res = await POST(req);
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.error).toMatch(/X-Requested-With/i);
+    });
+
+    it('returns 503 when the global concurrency cap is exhausted (T2)', async () => {
+      const { acquireJob, releaseJob } = await import('@/lib/concurrency');
+      let acquired = 0;
+      while (acquireJob()) acquired++;
+      try {
+        const { status, json } = await call({ content: '+' });
+        expect(status).toBe(503);
+        expect(json.error).toMatch(/busy/i);
+      } finally {
+        for (let i = 0; i < acquired; i++) releaseJob();
+      }
+    });
+
     it('rejects empty content', async () => {
       const { status, json } = await call({});
       expect(status).toBe(400);
