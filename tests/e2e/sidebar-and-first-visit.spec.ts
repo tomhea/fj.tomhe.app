@@ -10,8 +10,8 @@ test.describe('Sidebar collapse', () => {
     await expect(hideBtn).toBeVisible();
     await hideBtn.click();
 
-    // After collapse, Explorer header text + main.fj row disappear.
-    await expect(page.locator('text=EXPLORER')).toHaveCount(0);
+    // After collapse, the Hide Explorer button disappears and main.fj row disappears.
+    await expect(page.locator('button[title="Hide Explorer"]')).toHaveCount(0);
     await expect(page.locator('span.truncate', { hasText: /^main\.fj$/ })).toHaveCount(0);
 
     // The rail's "Show Explorer" button is the only thing left of the sidebar.
@@ -19,8 +19,8 @@ test.describe('Sidebar collapse', () => {
     await expect(showBtn).toBeVisible();
     await showBtn.click();
 
-    // Back to expanded.
-    await expect(page.locator('text=EXPLORER')).toBeVisible();
+    // Back to expanded — Hide Explorer button is visible again.
+    await expect(page.locator('button[title="Hide Explorer"]')).toBeVisible();
     await expect(page.locator('span.truncate', { hasText: /^main\.fj$/ })).toBeVisible();
   });
 

@@ -187,7 +187,7 @@ export default function FileTree({
       {/* Explorer subtitle */}
       <div
         className="px-3 py-1"
-        style={{ color: '#6e6e6e', fontSize: 10, borderBottom: '1px solid #3c3c3c' }}
+        style={{ color: '#9e9e9e', fontSize: 10, borderBottom: '1px solid #3c3c3c' }}
       >
         Flipjump reads the files in order, top to bottom.
       </div>

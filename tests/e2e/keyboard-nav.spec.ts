@@ -6,6 +6,8 @@ test.describe('Keyboard navigation', () => {
     await freshSession(page);
     await toolbarBtn(page, 'Open language reference and STL viewer');
     await page.locator('[role="dialog"]').waitFor();
+    // Give React's useEffect time to attach the keydown listener before pressing Escape.
+    await page.waitForTimeout(200);
     await page.keyboard.press('Escape');
     await expect(page.locator('[role="dialog"]')).toHaveCount(0);
   });

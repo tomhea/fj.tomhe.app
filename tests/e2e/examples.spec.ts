@@ -3,10 +3,8 @@ import { freshSession, waitForTerminal } from './_helpers';
 
 const cases: Array<{ name: string; expectedOutput: RegExp }> = [
   { name: 'Hello World', expectedOutput: /Hello, World!/ },
-  { name: 'Counter (0–9)', expectedOutput: /0123456789/ },
-  { name: 'Alphabet', expectedOutput: /abcdefghijklmnopqrstuvwxyz/ },
-  { name: 'Hex Digits', expectedOutput: /0123456789ABCDEF/ },
-  { name: 'Multi-file', expectedOutput: /Hello from greet/ },
+  { name: 'Function Calls', expectedOutput: /ABC/ },
+  { name: 'Multi-file Compilation', expectedOutput: /Hello, FlipJump!/ },
 ];
 
 test.describe('Examples dropdown', () => {
@@ -18,7 +16,7 @@ test.describe('Examples dropdown', () => {
     }
     // Click the backdrop / outside the menu to close.
     await page.locator('body').click({ position: { x: 5, y: 200 } });
-    await expect(page.locator('button:has-text("Counter (0–9)")')).toHaveCount(0);
+    await expect(page.locator('button:has-text("Function Calls")')).toHaveCount(0);
   });
 
   for (const c of cases) {

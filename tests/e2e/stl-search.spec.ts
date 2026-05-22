@@ -23,7 +23,7 @@ test.describe('STL search', () => {
     // Before search: directories are visible (tree mode)
     await searchInput.fill('runlib');
     // Should show at least one result matching "runlib"
-    await expect(page.locator('text=runlib.fj')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('text=runlib.fj').first()).toBeVisible({ timeout: 5_000 });
   });
 
   test('shows "No results" when no files match the query', async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe('STL search', () => {
     await openStlTab(page);
     const searchInput = page.locator('input[aria-label="Search standard library"]');
     await searchInput.fill('runlib');
-    await expect(page.locator('text=runlib.fj')).toBeVisible();
+    await expect(page.locator('text=runlib.fj').first()).toBeVisible();
 
     await page.locator('button[aria-label="Clear search"]').click();
     expect(await searchInput.inputValue()).toBe('');

@@ -59,6 +59,7 @@ function makeMultipart(file: Blob, filename: string): Request {
   fd.append('file', file, filename);
   return new Request('http://localhost/api/c2fj', {
     method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
     body: fd,
   });
 }
@@ -78,11 +79,29 @@ function makeZip(entries: Array<{ name: string; data: Buffer; symlink?: boolean 
 
 describe('POST /api/c2fj', () => {
   describe('validation', () => {
+    it('rejects missing X-Requested-With header (CSRF guard)', async () => {
+      const fd = new FormData();
+      fd.append('file', new Blob(['int main(){}']), 'hello.c');
+      const res = await POST(
+        new Request('http://localhost/api/c2fj', {
+          method: 'POST',
+          body: fd,
+          // no X-Requested-With
+        }) as never,
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.error).toMatch(/X-Requested-With/i);
+    });
+
     it('rejects wrong content-type', async () => {
       const res = await POST(
         new Request('http://localhost/api/c2fj', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: {
+            'content-type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
           body: JSON.stringify({ foo: 1 }),
         }) as never,
       );
@@ -96,6 +115,7 @@ describe('POST /api/c2fj', () => {
       const res = await POST(
         new Request('http://localhost/api/c2fj', {
           method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
           body: fd,
         }) as never,
       );

@@ -250,14 +250,9 @@ export default function IDE() {
   const deleteFile = useCallback(
     (id: string) => {
       setFiles((prev) => {
+        // Always keep at least one file — deleting the last file is a no-op.
+        if (prev.length <= 1) return prev;
         const next = prev.filter((f) => f.id !== id);
-        if (next.length === 0) {
-          // Deleting the last file: create a fresh untitled.fj
-          const fresh: FJFile = { id: uuidv4(), name: 'untitled.fj', content: `// untitled.fj\n` };
-          setActiveFileId(fresh.id);
-          setActiveSourceIdx(null);
-          return [fresh];
-        }
         setActiveFileId((current) => (current === id ? next[0].id : current));
         return next;
       });
@@ -531,6 +526,7 @@ export default function IDE() {
       try {
         const res = await fetch('/api/c2fj', {
           method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
           body: formData,
           signal: ctrl.signal,
         });

@@ -4,7 +4,7 @@ import { freshSession, waitForTerminal, toolbarBtn, terminalText } from './_help
 test.describe('Default Hello World', () => {
   test('page loads with main.fj in the tree and editor visible', async ({ page }) => {
     await freshSession(page);
-    await expect(page).toHaveTitle(/FlipJump Interpreter/);
+    await expect(page).toHaveTitle(/FlipJump IDE/);
     await expect(page.locator('text=main.fj')).toBeVisible();
     await expect(page.locator('button[title="Compile FJ → FJM"]')).toBeVisible();
     await expect(page.locator('button[title="Compile and run FJ online"]')).toBeVisible();

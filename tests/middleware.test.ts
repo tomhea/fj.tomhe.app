@@ -3,10 +3,8 @@ import { NextRequest } from 'next/server';
 import { middleware } from '@/middleware';
 
 /**
- * Guard the CSP string against accidental regressions — we previously
- * shipped a strict CSP that silently broke Monaco in production because
- * @monaco-editor/react fetches vs/loader.js from jsdelivr. These
- * assertions encode the minimal allowlist that keeps the IDE working.
+ * Guard the CSP string against accidental regressions. Monaco is now
+ * self-hosted from /monaco-vs, so no cdn.jsdelivr.net allowances are needed.
  */
 function call(): Response {
   const req = new NextRequest('http://localhost/');
@@ -26,16 +24,15 @@ describe('middleware CSP headers', () => {
   describe('CSP directive contents', () => {
     const csp = call().headers.get('content-security-policy') ?? '';
 
-    it('allows same-origin scripts + the Monaco CDN', () => {
-      // @monaco-editor/react loads vs/loader.js from jsdelivr; without
-      // this entry, prod silently shows "Loading FlipJump IDE…" forever.
+    it('allows same-origin scripts (Monaco is self-hosted — no CDN needed)', () => {
       expect(csp).toMatch(/script-src[^;]+'self'/);
-      expect(csp).toMatch(/script-src[^;]+https:\/\/cdn\.jsdelivr\.net/);
+      expect(csp).not.toContain('cdn.jsdelivr.net');
     });
 
-    it('allows Monaco CDN for stylesheets + fonts', () => {
-      expect(csp).toMatch(/style-src[^;]+https:\/\/cdn\.jsdelivr\.net/);
-      expect(csp).toMatch(/font-src[^;]+https:\/\/cdn\.jsdelivr\.net/);
+    it('allows same-origin stylesheets + fonts (Monaco is self-hosted)', () => {
+      expect(csp).toMatch(/style-src[^;]+'self'/);
+      expect(csp).toMatch(/font-src[^;]+'self'/);
+      expect(csp).not.toContain('cdn.jsdelivr.net');
     });
 
     it('allows ws:/wss: for the runner WebSocket', () => {
