@@ -70,9 +70,15 @@ test.describe('Cached example .fjm path', () => {
     await page.locator('button[title="Load a built-in example"]').click();
     await page.locator('button:has-text("Hello World")').click();
 
-    // Touch the editor to invalidate the cache hash.
+    // Invalidate the cache hash by appending a single space at the end of
+    // the file. We previously used `keyboard.type(' // NOT-CACHED')`, but
+    // Monaco occasionally swallows characters mid-token when fired without a
+    // delay (we saw "NOACHED" instead of "NOT-CACHED" in CI, which fj then
+    // parsed as a macro name and the test exited with code 1). A trailing
+    // space is the smallest, safest hash-invalidating edit.
     await page.locator('.monaco-editor').click();
-    await page.keyboard.type(' // NOT-CACHED');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' ');
 
     // Reset request log so we only count THIS run's requests.
     cachedHits.length = 0;
