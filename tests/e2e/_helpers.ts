@@ -4,6 +4,14 @@ import { Page, expect } from '@playwright/test';
  * default. Crucially we pre-set `fj-visited` so the auto-run-on-first-visit
  * doesn't race against the test's first interaction. */
 export async function freshSession(page: Page): Promise<void> {
+  // Capture browser console errors so CI logs show WHY Monaco failed (if it
+  // does), without requiring a local repro.
+  const consoleErrors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
+
   await page.goto('/');
   await page.evaluate(() => {
     localStorage.clear();
@@ -14,7 +22,20 @@ export async function freshSession(page: Page): Promise<void> {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   // Wait for the editor to actually mount.
-  await page.locator('.monaco-editor').waitFor();
+  try {
+    await page.locator('.monaco-editor').waitFor({ timeout: 45_000 });
+  } catch (e) {
+    // Dump any captured console errors to make CI failures easier to debug.
+    if (consoleErrors.length) {
+      console.error('Browser console errors captured before Monaco timeout:\n' +
+        consoleErrors.join('\n'));
+    }
+    // Re-check whether the page even loaded (catch blank-page / 404 errors).
+    const title = await page.title().catch(() => '(unknown)');
+    const url = page.url();
+    console.error(`Monaco did not mount. Page: ${url} | Title: ${title}`);
+    throw e;
+  }
 }
 
 /** Concatenated terminal text. The runner emits stdout in chunks and each

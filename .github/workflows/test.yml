@@ -60,7 +60,7 @@ jobs:
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
     needs: unit-and-api
     steps:
       - uses: actions/checkout@v4
@@ -97,6 +97,16 @@ jobs:
         # `with-deps` brings in system libraries Chromium needs on Ubuntu.
         run: npx playwright install --with-deps chromium
 
+      - name: Build Next.js app
+        # Pre-compile before Playwright so tests run against the production
+        # build rather than the dev server. Production serving avoids on-demand
+        # compilation latency that caused Monaco's AMD loading to race the 60 s
+        # per-test budget in dev mode.
+        run: npm run build
+        env:
+          # Disable Next.js telemetry during CI builds.
+          NEXT_TELEMETRY_DISABLED: '1'
+
       - name: Run Playwright E2E
         run: npx playwright test
         env:
@@ -104,6 +114,8 @@ jobs:
           # across browser tabs / retries.
           WS_MAX_CONNECTIONS_PER_IP: '50'
           WS_MAX_TOTAL_CONNECTIONS: '100'
+          # Disable Next.js telemetry during tests.
+          NEXT_TELEMETRY_DISABLED: '1'
 
       - name: Upload Playwright report on failure
         if: failure()

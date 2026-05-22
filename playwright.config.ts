@@ -38,14 +38,23 @@ export default defineConfig({
   ],
 
   webServer: {
-    // We rely on the default Hello World; reset localStorage in each test
-    // via the test fixture (see tests/e2e/helpers.ts).
-    command: 'npm run dev',
+    // In CI we run against the production build (pre-built by the workflow step
+    // "Build Next.js app" that runs before Playwright). Production serving is
+    // much faster than dev — no on-demand compilation — so Monaco's AMD loading
+    // completes well within the 60 s per-test budget.
+    //
+    // Locally (non-CI) we reuse whatever server is already running (typically
+    // `npm run dev`). If no server is up Playwright starts `npm start`, which
+    // requires a prior `npm run build` — run that manually once if needed.
+    command: process.env.CI ? 'npm start' : 'npm run dev',
     port: 3713,
     timeout: 180_000,
     reuseExistingServer: !process.env.CI,
     env: {
       PORT: '3713',
+      // Override any system HOSTNAME so the server always binds to localhost,
+      // not to a container-specific hostname that Playwright can't reach.
+      HOSTNAME: 'localhost',
     },
   },
 });
