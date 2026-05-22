@@ -118,8 +118,47 @@ type ServerMsg =
   | { type: 'exit'; code: number | null; signal?: string | null }
   | { type: 'error'; data: string };
 
+// Strict runtime shape check. Without this, fields like msg.stdin can be
+// non-string and crash the process when passed to Buffer.byteLength.
+function isValidMessage(m: unknown): m is ClientMsg {
+  if (!m || typeof m !== 'object') return false;
+  const msg = m as Record<string, unknown>;
+  switch (msg.type) {
+    case 'run_fj':
+      return (
+        Array.isArray(msg.files) &&
+        msg.files.every(
+          (f) =>
+            f && typeof f === 'object' &&
+            typeof (f as { name?: unknown }).name === 'string' &&
+            typeof (f as { content?: unknown }).content === 'string',
+        ) &&
+        (msg.initialStdin === undefined || typeof msg.initialStdin === 'string')
+      );
+    case 'run_fjm':
+      return (
+        typeof msg.fjmBase64 === 'string' &&
+        (msg.initialStdin === undefined || typeof msg.initialStdin === 'string')
+      );
+    case 'stdin':
+      return typeof msg.stdin === 'string';
+    case 'kill':
+      return true;
+    default:
+      return false;
+  }
+}
+
 async function handleRunConnection(ws: WebSocket): Promise<void> {
   let proc: ChildProcess | null = null;
+  // Synchronous lock against two awaited run_* messages racing past the
+  // `if (proc) return` guard and both spawning children. Set before the
+  // first await, cleared in finally.
+  let starting = false;
+  // Set when 'kill' arrives during the starting window (proc not yet
+  // assigned). The run_* path checks this right before attachProc and
+  // skips the spawn so the client doesn't end up with an orphan running.
+  let pendingKill = false;
   let tempDir: string | null = null;
   let runTimeout: NodeJS.Timeout | null = null;
   let killTimeout: NodeJS.Timeout | null = null;
@@ -203,123 +242,178 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
   }
 
   ws.on('message', async (raw: RawData) => {
-    let msg: ClientMsg;
     try {
-      msg = JSON.parse(raw.toString()) as ClientMsg;
-    } catch {
-      send({ type: 'error', data: 'Invalid message.' });
-      return;
-    }
-
-    if (msg.type === 'run_fj') {
-      if (proc) {
-        send({ type: 'error', data: 'A process is already running.' });
-        return;
-      }
-      if (!msg.files?.length) {
-        send({ type: 'error', data: 'No files provided.' });
-        return;
-      }
-      if (msg.files.length > MAX_FILES) {
-        send({ type: 'error', data: `Too many files (max ${MAX_FILES}).` });
-        return;
-      }
-      if (msg.initialStdin && Buffer.byteLength(msg.initialStdin) > MAX_STDIN_BYTES) {
-        send({ type: 'error', data: 'Stdin too large.' });
-        return;
-      }
-
+      let parsed: unknown;
       try {
-        tempDir = join(tmpdir(), `fj-run-${uuidv4()}`);
-        await mkdir(tempDir, { recursive: true });
+        parsed = JSON.parse(raw.toString());
+      } catch {
+        send({ type: 'error', data: 'Invalid message.' });
+        return;
+      }
+      if (!isValidMessage(parsed)) {
+        send({ type: 'error', data: 'Invalid message shape.' });
+        return;
+      }
+      const msg = parsed;
 
-        const paths: string[] = [];
-        let total = 0;
-        for (const file of msg.files) {
-          if (!isSafeFilename(file.name)) {
-            send({ type: 'error', data: `Unsafe filename: ${file.name}` });
-            return;
-          }
-          const size = Buffer.byteLength(file.content);
-          if (size > MAX_FILE_BYTES) {
-            send({ type: 'error', data: `File too large: ${file.name}` });
-            return;
-          }
-          total += size;
-          if (total > MAX_TOTAL_BYTES) {
-            send({ type: 'error', data: 'Combined file size exceeds limit.' });
-            return;
-          }
-          const p = join(tempDir, file.name);
-          await writeFile(p, file.content, 'utf8');
-          paths.push(p);
+      if (msg.type === 'run_fj') {
+        if (proc || starting) {
+          send({ type: 'error', data: 'A process is already running.' });
+          return;
         }
+        starting = true;
+        try {
+          if (!msg.files.length) {
+            send({ type: 'error', data: 'No files provided.' });
+            return;
+          }
+          if (msg.files.length > MAX_FILES) {
+            send({ type: 'error', data: `Too many files (max ${MAX_FILES}).` });
+            return;
+          }
+          if (msg.initialStdin && Buffer.byteLength(msg.initialStdin) > MAX_STDIN_BYTES) {
+            send({ type: 'error', data: 'Stdin too large.' });
+            return;
+          }
+          // Pre-validate filenames/sizes before mkdir so a bad payload
+          // doesn't leak a tempdir.
+          let total = 0;
+          for (const file of msg.files) {
+            if (!isSafeFilename(file.name)) {
+              send({ type: 'error', data: `Unsafe filename: ${file.name}` });
+              return;
+            }
+            const size = Buffer.byteLength(file.content);
+            if (size > MAX_FILE_BYTES) {
+              send({ type: 'error', data: `File too large: ${file.name}` });
+              return;
+            }
+            total += size;
+            if (total > MAX_TOTAL_BYTES) {
+              send({ type: 'error', data: 'Combined file size exceeds limit.' });
+              return;
+            }
+          }
 
-        // Real fj CLI: `fj <files…>` assembles AND runs in one step (default).
-        attachProc(
-          spawn(FJ_CMD, paths, { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
-          msg.initialStdin,
-        );
-      } catch (err) {
-        send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
-      }
-    } else if (msg.type === 'run_fjm') {
-      if (proc) {
-        send({ type: 'error', data: 'A process is already running.' });
-        return;
-      }
-      if (!msg.fjmBase64) {
-        send({ type: 'error', data: 'No FJM content.' });
-        return;
-      }
-      if (msg.initialStdin && Buffer.byteLength(msg.initialStdin) > MAX_STDIN_BYTES) {
-        send({ type: 'error', data: 'Stdin too large.' });
-        return;
-      }
+          tempDir = join(tmpdir(), `fj-run-${uuidv4()}`);
+          await mkdir(tempDir, { recursive: true });
 
-      try {
-        tempDir = join(tmpdir(), `fj-run-${uuidv4()}`);
-        await mkdir(tempDir, { recursive: true });
-        const fjmPath = join(tempDir, 'program.fjm');
-        await writeFile(fjmPath, Buffer.from(msg.fjmBase64, 'base64'));
-        // Real fj CLI: `fj --run <prog.fjm>`.
-        attachProc(
-          spawn(FJ_CMD, ['--run', fjmPath], {
-            cwd: tempDir,
-            stdio: ['pipe', 'pipe', 'pipe'],
-          }),
-          msg.initialStdin,
-        );
-      } catch (err) {
-        send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
+          const paths: string[] = [];
+          for (const file of msg.files) {
+            const p = join(tempDir, file.name);
+            await writeFile(p, file.content, 'utf8');
+            paths.push(p);
+          }
+
+          if (pendingKill) {
+            // A kill arrived during the starting window. Don't spawn.
+            if (tempDir) {
+              rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              tempDir = null;
+            }
+            send({ type: 'exit', code: null, signal: null });
+          } else {
+            // Real fj CLI: `fj <files…>` assembles AND runs in one step (default).
+            attachProc(
+              spawn(FJ_CMD, paths, { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
+              msg.initialStdin,
+            );
+          }
+        } catch (err) {
+          if (tempDir) {
+            rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            tempDir = null;
+          }
+          send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
+        } finally {
+          starting = false;
+          pendingKill = false;
+        }
+      } else if (msg.type === 'run_fjm') {
+        if (proc || starting) {
+          send({ type: 'error', data: 'A process is already running.' });
+          return;
+        }
+        starting = true;
+        try {
+          if (!msg.fjmBase64) {
+            send({ type: 'error', data: 'No FJM content.' });
+            return;
+          }
+          if (msg.initialStdin && Buffer.byteLength(msg.initialStdin) > MAX_STDIN_BYTES) {
+            send({ type: 'error', data: 'Stdin too large.' });
+            return;
+          }
+
+          tempDir = join(tmpdir(), `fj-run-${uuidv4()}`);
+          await mkdir(tempDir, { recursive: true });
+          const fjmPath = join(tempDir, 'program.fjm');
+          await writeFile(fjmPath, Buffer.from(msg.fjmBase64, 'base64'));
+          if (pendingKill) {
+            // A kill arrived during the starting window. Don't spawn.
+            if (tempDir) {
+              rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              tempDir = null;
+            }
+            send({ type: 'exit', code: null, signal: null });
+          } else {
+            // Real fj CLI: `fj --run <prog.fjm>`.
+            attachProc(
+              spawn(FJ_CMD, ['--run', fjmPath], {
+                cwd: tempDir,
+                stdio: ['pipe', 'pipe', 'pipe'],
+              }),
+              msg.initialStdin,
+            );
+          }
+        } catch (err) {
+          if (tempDir) {
+            rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            tempDir = null;
+          }
+          send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
+        } finally {
+          starting = false;
+          pendingKill = false;
+        }
+      } else if (msg.type === 'stdin') {
+        const chunkBytes = Buffer.byteLength(msg.stdin);
+        if (chunkBytes > MAX_STDIN_BYTES) {
+          send({ type: 'error', data: 'Stdin chunk too large.' });
+          return;
+        }
+        stdinBytesTotal += chunkBytes;
+        if (stdinBytesTotal > MAX_STDIN_TOTAL_BYTES) {
+          send({ type: 'error', data: 'Total stdin limit exceeded.' });
+          cleanup();
+          ws.close();
+          return;
+        }
+        if (proc?.stdin?.writable) {
+          proc.stdin.write(msg.stdin);
+        }
+      } else if (msg.type === 'kill') {
+        if (proc) {
+          // Kill the running process.  child.on('close') will emit the exit
+          // event once the OS confirms termination — prevents a double-exit
+          // race where cleanup() + the close handler both send 'exit'.
+          cleanup();
+        } else if (starting) {
+          // Spawn is in flight (between mkdir/writeFile and attachProc).
+          // Defer the kill — the run_* handler checks pendingKill right
+          // before calling attachProc and aborts the spawn.
+          pendingKill = true;
+        } else {
+          // Idle — send a synthetic exit so the client's kill/exit
+          // handshake completes without hanging.
+          send({ type: 'exit', code: null, signal: null });
+        }
       }
-    } else if (msg.type === 'stdin') {
-      const chunkBytes = Buffer.byteLength(msg.stdin);
-      if (chunkBytes > MAX_STDIN_BYTES) {
-        send({ type: 'error', data: 'Stdin chunk too large.' });
-        return;
-      }
-      stdinBytesTotal += chunkBytes;
-      if (stdinBytesTotal > MAX_STDIN_TOTAL_BYTES) {
-        send({ type: 'error', data: 'Total stdin limit exceeded.' });
-        cleanup();
-        ws.close();
-        return;
-      }
-      if (proc?.stdin?.writable) {
-        proc.stdin.write(msg.stdin);
-      }
-    } else if (msg.type === 'kill') {
-      if (!proc) {
-        // No process is running; send a synthetic exit so the client's
-        // kill/exit handshake completes without hanging.
-        send({ type: 'exit', code: null, signal: null });
-      } else {
-        // Kill the running process.  child.on('close') will emit the exit
-        // event once the OS confirms termination — prevents a double-exit
-        // race where cleanup() + the close handler both send 'exit'.
-        cleanup();
-      }
+    } catch (err) {
+      // Last line of defense: any future code path that throws must not
+      // crash the process and drop every other connection.
+      send({ type: 'error', data: 'Internal handler error.' });
+      console.error('[ws] message handler error:', err);
     }
   });
 
@@ -404,6 +498,15 @@ app.prepare().then(() => {
   }
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+
+  // Defense in depth: keep the worker alive if anything escapes the
+  // per-handler try/catch. Logged-only, no exit.
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled promise rejection:', reason);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err);
+  });
 
   httpServer.listen(port, hostname, () => {
     console.log(`> FlipJump Interpreter ready at http://${hostname}:${port}`);

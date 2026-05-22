@@ -252,4 +252,137 @@ describe('WS security edge cases', () => {
       expect(exit).toBeDefined();
     },
   );
+
+  // Vuln 1 (HIGH): a single malformed stdin (non-string) used to crash the
+  // worker via Buffer.byteLength → TypeError → unhandled rejection.
+  it('non-string stdin replies with an error and the server stays alive', { timeout: TEST_TIMEOUT }, async (ctx) => {
+    if (!serverAvailable) return ctx.skip();
+    const ws = openWs();
+    await new Promise<void>((r) => ws.once('open', () => r()));
+
+    // null is the canonical crash vector; also exercise object/number.
+    ws.send(JSON.stringify({ type: 'stdin', stdin: null }));
+    ws.send(JSON.stringify({ type: 'stdin', stdin: 42 }));
+    ws.send(JSON.stringify({ type: 'stdin', stdin: { malicious: true } }));
+
+    const errors: Evt[] = [];
+    await new Promise<void>((r) => {
+      const h = (raw: WebSocket.RawData) => {
+        try {
+          const e = JSON.parse(raw.toString()) as Evt;
+          if (e.type === 'error') errors.push(e);
+          if (errors.length >= 3) {
+            ws.off('message', h);
+            r();
+          }
+        } catch {}
+      };
+      ws.on('message', h);
+      setTimeout(r, 3_000);
+    });
+    try { ws.close(); } catch {}
+
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors[0].data).toMatch(/invalid message shape/i);
+
+    // Server must still accept new connections — that's the regression we
+    // care about. (Before the fix, the worker died on the null message.)
+    await new Promise((r) => setTimeout(r, 200));
+    const ws2 = openWs();
+    const stillAlive = await new Promise<boolean>((resolve) => {
+      ws2.once('open', () => { try { ws2.close(); } catch {} resolve(true); });
+      ws2.once('error', () => resolve(false));
+      setTimeout(() => resolve(false), 5_000);
+    });
+    expect(stillAlive).toBe(true);
+  });
+
+  // Vuln 2 (MEDIUM): two run_fj sent back-to-back must not both spawn.
+  // Before the fix, the `if (proc) return` guard raced with the awaited
+  // mkdir/writeFile and both messages started a child.
+  it.skipIf(!fjAvailable)(
+    'two run_fj back-to-back: only one process starts',
+    { timeout: TEST_TIMEOUT },
+    async (ctx) => {
+      if (!serverAvailable) return ctx.skip();
+      const ws = openWs();
+      await new Promise<void>((r) => ws.once('open', () => r()));
+
+      const spin = ['stl.startup', "stl.output_char 'X'", 'stl.loop', ''].join('\n');
+      const collected: Evt[] = [];
+      ws.on('message', (raw) => {
+        try { collected.push(JSON.parse(raw.toString()) as Evt); } catch {}
+      });
+
+      // Send both without awaiting between them. Same JS tick → both calls
+      // are queued before any message handler awaits.
+      ws.send(JSON.stringify({ type: 'run_fj', files: [{ name: 'a.fj', content: spin }] }));
+      ws.send(JSON.stringify({ type: 'run_fj', files: [{ name: 'b.fj', content: spin }] }));
+
+      // Give the server time to process both, then count startups.
+      await new Promise((r) => setTimeout(r, 1_500));
+
+      const startedCount = collected.filter((e) => e.type === 'started').length;
+      const alreadyRunningErr = collected.find(
+        (e) => e.type === 'error' && /already running/i.test(e.data ?? ''),
+      );
+
+      // Kill before assertions so a stray child is reaped.
+      try {
+        ws.send(JSON.stringify({ type: 'kill' }));
+        await new Promise((r) => setTimeout(r, 500));
+        ws.close();
+      } catch {}
+
+      expect(startedCount).toBe(1);
+      expect(alreadyRunningErr).toBeDefined();
+    },
+  );
+
+  // Issue 1 (LOW): kill during the spawn-starting window must not leave
+  // an orphan child running while the client sees a synthetic exit.
+  it.skipIf(!fjAvailable)(
+    'kill during starting aborts the spawn and clears pendingKill',
+    { timeout: TEST_TIMEOUT },
+    async (ctx) => {
+      if (!serverAvailable) return ctx.skip();
+      const ws = openWs();
+      await new Promise<void>((r) => ws.once('open', () => r()));
+
+      const spin = ['stl.startup', "stl.output_char 'X'", 'stl.loop', ''].join('\n');
+      const collected: Evt[] = [];
+      ws.on('message', (raw) => {
+        try { collected.push(JSON.parse(raw.toString()) as Evt); } catch {}
+      });
+
+      // Send run_fj and kill in the same JS tick. The kill handler sees
+      // starting=true and defers; the spawn path checks pendingKill before
+      // attachProc and skips the spawn.
+      ws.send(JSON.stringify({ type: 'run_fj', files: [{ name: 'a.fj', content: spin }] }));
+      ws.send(JSON.stringify({ type: 'kill' }));
+
+      await new Promise((r) => setTimeout(r, 1_500));
+
+      const started = collected.filter((e) => e.type === 'started');
+      const exits = collected.filter((e) => e.type === 'exit');
+      // No 'started' should have been emitted — the spawn was aborted.
+      expect(started.length).toBe(0);
+      // The client must see exactly one synthetic exit.
+      expect(exits.length).toBe(1);
+
+      // pendingKill must have been cleared in finally — a follow-up run_fj
+      // on the same connection should proceed and emit 'started'.
+      collected.length = 0;
+      ws.send(JSON.stringify({ type: 'run_fj', files: [{ name: 'b.fj', content: spin }] }));
+      await new Promise((r) => setTimeout(r, 1_500));
+      const restarted = collected.filter((e) => e.type === 'started').length;
+      expect(restarted).toBe(1);
+
+      try {
+        ws.send(JSON.stringify({ type: 'kill' }));
+        await new Promise((r) => setTimeout(r, 500));
+        ws.close();
+      } catch {}
+    },
+  );
 });
