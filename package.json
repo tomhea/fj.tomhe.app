@@ -9,7 +9,7 @@
     "postinstall": "node scripts/copy-monaco.js",
     "predev": "node scripts/fetch-stl.mjs && tsx scripts/build-example-index.ts && node scripts/build-example-fjms-if-fj.mjs",
     "dev": "tsx server.ts",
-    "prebuild": "node scripts/fetch-stl.mjs && tsx scripts/build-example-index.ts",
+    "prebuild": "node scripts/fetch-stl.mjs && tsx scripts/build-example-index.ts && node scripts/build-example-fjms-if-fj.mjs",
     "build": "next build",
     "start": "cross-env NODE_ENV=production tsx server.ts",
     "test": "vitest run",

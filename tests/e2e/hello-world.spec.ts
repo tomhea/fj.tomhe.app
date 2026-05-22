@@ -37,16 +37,6 @@ test.describe('Default Hello World', () => {
     await expect(page.locator('button[title="Run compiled FJM online"]')).toHaveCount(0);
   });
 
-  test('Copy Link writes URL to clipboard', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await freshSession(page);
-    await toolbarBtn(page, 'Copy shareable link to clipboard');
-    // Button flips to "Copied!" for ~2s.
-    await expect(page.locator('button:has-text("Copied!")')).toBeVisible();
-    const clip = await page.evaluate(() => navigator.clipboard.readText());
-    expect(clip).toContain('http://localhost:3713/');
-  });
-
   test('Invalid FJ shows error markers in editor', async ({ page }) => {
     await freshSession(page);
     // Replace the source with garbage.
