@@ -32,41 +32,41 @@ export const runtime = 'nodejs';
 export const maxDuration = 150;
 
 export async function POST(req: NextRequest) {
+  // Cheap guards — return early without entering the try/finally,
+  // so releaseJob() only runs when acquireJob() succeeded.
+  if (!req.headers.get('x-requested-with')) {
+    return NextResponse.json(
+      { success: false, error: 'Missing X-Requested-With header.' },
+      { status: 400 },
+    );
+  }
+
+  const contentType = req.headers.get('content-type') ?? '';
+  if (!contentType.includes('multipart/form-data')) {
+    return NextResponse.json(
+      { success: false, error: 'Expected multipart/form-data.' },
+      { status: 400 },
+    );
+  }
+
+  const cl = parseInt(req.headers.get('content-length') ?? '0', 10);
+  if (!isNaN(cl) && cl > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { success: false, error: 'Request too large.' },
+      { status: 413 },
+    );
+  }
+
+  if (!acquireJob()) {
+    return NextResponse.json(
+      { success: false, error: 'Server busy. Try again shortly.' },
+      { status: 503 },
+    );
+  }
+
   let tempDir: string | null = null;
 
   try {
-    // Require a non-simple header so browsers send a CORS preflight for
-    // cross-origin requests — this prevents CSRF form submissions.
-    if (!req.headers.get('x-requested-with')) {
-      return NextResponse.json(
-        { success: false, error: 'Missing X-Requested-With header.' },
-        { status: 400 },
-      );
-    }
-
-    const contentType = req.headers.get('content-type') ?? '';
-    if (!contentType.includes('multipart/form-data')) {
-      return NextResponse.json(
-        { success: false, error: 'Expected multipart/form-data.' },
-        { status: 400 },
-      );
-    }
-
-    const cl = parseInt(req.headers.get('content-length') ?? '0', 10);
-    if (!isNaN(cl) && cl > MAX_BODY_BYTES) {
-      return NextResponse.json(
-        { success: false, error: 'Request too large.' },
-        { status: 413 },
-      );
-    }
-
-    if (!acquireJob()) {
-      return NextResponse.json(
-        { success: false, error: 'Server busy. Try again shortly.' },
-        { status: 503 },
-      );
-    }
-
     const formData = await req.formData();
     const uploadedFile = formData.get('file') as File | null;
     if (!uploadedFile) {
