@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { writeFile, readFile, mkdir, rm } from 'fs/promises';
@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import AdmZip from 'adm-zip';
 import { isSafeCFilename } from '@/lib/safe-filename';
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
+import { acquireJob, releaseJob } from '@/lib/concurrency';
 
 const execFileAsync = promisify(execFile);
 
@@ -101,10 +102,19 @@ export async function POST(req: NextRequest) {
         const destReal = resolve(destPath);
         if (!destReal.startsWith(srcDirReal)) continue;
 
-        // Decompress first, then check actual size — zip central-directory
-        // headers are attacker-controlled and can be forged to claim 0 bytes
-        // while decompressing to gigabytes.
-        const data = entry.getData();
+        // Fast reject using the header's declared size — attacker-controlled but
+        // catches honest oversized entries before we attempt decompression.
+        if (entry.header.size > MAX_DECOMPRESSED_ENTRY) continue;
+
+        // Decompress and verify actual size — the header can be forged to claim
+        // 0 bytes while decompressing to gigabytes (zip bomb). Wrap in try/catch
+        // so an OOM or zlib error on a malformed entry skips it cleanly.
+        let data: Buffer;
+        try {
+          data = entry.getData();
+        } catch {
+          continue;
+        }
         if (data.byteLength > MAX_DECOMPRESSED_ENTRY) continue;
         totalExtracted += data.byteLength;
         if (totalExtracted > MAX_DECOMPRESSED_TOTAL) {

@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage } from 'http';
+﻿import { createServer, IncomingMessage } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
@@ -44,6 +44,12 @@ const MAX_TOTAL_CONNECTIONS = parseInt(
 // Applies to all /api/* routes before Next.js handles them.
 const API_RATE_LIMIT = parseInt(process.env.API_RATE_LIMIT ?? '20', 10);
 const API_RATE_WINDOW_MS = 60_000;
+// Maximum Content-Length accepted for any /api/* request. Requests with a
+// Content-Length header above this are rejected before Next.js buffers the body.
+const MAX_API_BODY_BYTES = parseInt(
+  process.env.MAX_API_BODY_BYTES ?? String(12 * 1024 * 1024),
+  10,
+);
 const apiRateLimiter = new Map<string, { count: number; reset: number }>();
 
 // Evict stale rate-limit entries every 5 minutes. Without this, a unique-IP
@@ -454,6 +460,12 @@ app.prepare().then(() => {
   const httpServer = createServer((req, res) => {
     const url = parse(req.url!, true);
     if (url.pathname?.startsWith('/api/')) {
+      const cl = parseInt(req.headers['content-length'] ?? '0', 10);
+      if (!isNaN(cl) && cl > MAX_API_BODY_BYTES) {
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Request too large.' }));
+        return;
+      }
       const ip = clientIp(req);
       if (!checkApiRateLimit(ip)) {
         res.writeHead(429, { 'Content-Type': 'application/json' });

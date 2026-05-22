@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
 import { execSync } from 'child_process';
 import { POST } from '@/app/api/compile/route';
@@ -22,7 +22,7 @@ const fjAvailable = (() => {
 function makeReq(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/compile', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
     body: JSON.stringify(body),
   });
 }
@@ -42,6 +42,23 @@ stl.loop
 
 describe('POST /api/compile', () => {
   describe('validation (no subprocess required)', () => {
+    it('rejects request missing X-Requested-With (CSRF guard)', async () => {
+      const req = new NextRequest('http://localhost/api/compile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ files: [{ name: 'a.fj', content: '' }] }),
+      });
+      const res = await POST(req);
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.error).toMatch(/X-Requested-With/i);
+    });
+
+    it('rejects Windows reserved device name', async () => {
+      const { status, json } = await call({ files: [{ name: 'CON.fj', content: '' }] });
+      expect(status).toBe(400);
+      expect(json.error).toMatch(/unsafe filename/i);
+    });
     it('rejects missing files array', async () => {
       const { status, json } = await call({});
       expect(status).toBe(400);

@@ -7,17 +7,43 @@ import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
+import { acquireJob, releaseJob } from '@/lib/concurrency';
 
 const execFileAsync = promisify(execFile);
 
-// bf2fj <input.bf> -o <output.fj>
 const BF2FJ_CMD = process.env.BF2FJ_CMD ?? 'bf2fj';
 const TIMEOUT_MS = 30_000;
 const MAX_BYTES = 512 * 1024;
+// Content-Length ceiling — reject oversize requests before Next.js buffers the body.
+const MAX_BODY_BYTES = MAX_BYTES + 64 * 1024; // content limit + JSON envelope headroom
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  // CSRF: require a non-simple header so cross-origin form/fetch sends a preflight.
+  if (!req.headers.get('x-requested-with')) {
+    return NextResponse.json(
+      { success: false, error: 'Missing X-Requested-With header.' },
+      { status: 400 },
+    );
+  }
+
+  // Reject oversize requests before buffering the body.
+  const cl = parseInt(req.headers.get('content-length') ?? '0', 10);
+  if (!isNaN(cl) && cl > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { success: false, error: 'Request too large.' },
+      { status: 413 },
+    );
+  }
+
+  if (!acquireJob()) {
+    return NextResponse.json(
+      { success: false, error: 'Server busy. Try again shortly.' },
+      { status: 503 },
+    );
+  }
+
   let tempDir: string | null = null;
 
   try {
@@ -68,6 +94,7 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   } finally {
+    releaseJob();
     if (tempDir) rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }

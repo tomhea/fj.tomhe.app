@@ -7,21 +7,46 @@ import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { isSafeFilename } from '@/lib/safe-filename';
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
+import { acquireJob, releaseJob } from '@/lib/concurrency';
 
 const execFileAsync = promisify(execFile);
 
 const FJ_CMD = process.env.FJ_CMD ?? 'fj';
 const MAX_FILES = 20;
-const MAX_FILE_BYTES = 256 * 1024; // 256 KB per file — see route segment config note
+const MAX_FILE_BYTES = 256 * 1024; // 256 KB per file
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024; // 2 MB aggregate
 const COMPILE_TIMEOUT_MS = 60_000;
+// Content-Length ceiling — reject oversize requests before Next.js buffers the body.
+const MAX_BODY_BYTES = MAX_TOTAL_BYTES + 64 * 1024; // aggregate limit + JSON envelope headroom
 
 export const runtime = 'nodejs';
-// Allow larger JSON bodies than the default 1 MB. Aggregate file size is
-// further capped inside the handler.
 export const maxDuration = 90;
 
 export async function POST(req: NextRequest) {
+  // CSRF: require a non-simple header so cross-origin form/fetch sends a preflight.
+  if (!req.headers.get('x-requested-with')) {
+    return NextResponse.json(
+      { success: false, error: 'Missing X-Requested-With header.' },
+      { status: 400 },
+    );
+  }
+
+  // Reject oversize requests before buffering the body.
+  const cl = parseInt(req.headers.get('content-length') ?? '0', 10);
+  if (!isNaN(cl) && cl > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { success: false, error: 'Request too large.' },
+      { status: 413 },
+    );
+  }
+
+  if (!acquireJob()) {
+    return NextResponse.json(
+      { success: false, error: 'Server busy. Try again shortly.' },
+      { status: 503 },
+    );
+  }
+
   let tempDir: string | null = null;
 
   try {
@@ -77,9 +102,6 @@ export async function POST(req: NextRequest) {
     }
 
     const outPath = join(tempDir, 'program.fjm');
-    // Use execFile (no shell) — Windows paths with spaces / backslashes
-    // are passed safely as argv. `fj --asm -o OUT FILES…` is the real CLI
-    // surface for "assemble only, save FJM".
     let stderr = '';
     try {
       const result = await execFileAsync(
@@ -107,6 +129,7 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   } finally {
+    releaseJob();
     if (tempDir) rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }
