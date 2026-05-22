@@ -50,6 +50,13 @@ jobs:
             source "${VENV_PATH}/bin/activate"
             npm config set legacy-peer-deps true
             npm ci --omit=dev
+            # Build cached .fjm binaries for built-in examples. The venv
+            # provides `fj` (flipjump pip install). Must run AFTER `npm ci`
+            # (so dependent tooling is in place) and BEFORE the service
+            # restart (so the first cache requests after a deploy hit fresh
+            # files). The TypeScript half — public/example-fjms/manifest.json
+            # — was already rsynced from the GA runner's prebuild step.
+            python scripts/build-example-fjms.py
             sudo systemctl restart fj
 
       - name: Smoke test (wait for 200 OK)

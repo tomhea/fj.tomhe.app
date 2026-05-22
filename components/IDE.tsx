@@ -18,8 +18,9 @@ import {
   MonacoMarker,
 } from '@/lib/types';
 import { Example } from '@/lib/examples';
-import { encodeShare, decodeShare } from '@/lib/share';
 import { parseMarkers } from '@/lib/parse-markers';
+import { EXAMPLE_FJM_INDEX } from '@/lib/generated/example-fjm-index';
+import { fingerprintFilesBrowser } from '@/lib/example-fjm-cache';
 
 const EXAMPLE_FJ = `// FlipJump Hello World
 // ----------------------
@@ -82,26 +83,10 @@ function saveToLocalStorage(key: string, value: unknown) {
   }
 }
 
-// Reads either `#share=…` (preferred — hash isn't sent in HTTP requests, so
-// shared programs don't end up in server access logs or Referer headers) or
-// the legacy `?share=…` query param so old links keep working.
-function readShareParam(): string | null {
-  if (typeof window === 'undefined') return null;
-  const hash = window.location.hash;
-  if (hash.startsWith('#share=')) return decodeURIComponent(hash.slice('#share='.length));
-  const params = new URLSearchParams(window.location.search);
-  return params.get('share');
-}
-
 function buildInitialFiles(): { files: FJFile[]; activeId: string } {
-  const shared = readShareParam();
-  if (shared) {
-    const decoded = decodeShare(shared);
-    if (decoded) {
-      const files = decoded.map((f) => ({ ...f, id: uuidv4() }));
-      return { files, activeId: files[0].id };
-    }
-  }
+  // Open files persist via localStorage only — the share-URL feature
+  // (#share= / ?share=) was removed because it leaked code into history /
+  // clipboards. Any leftover ?share= or #share= in the URL is ignored.
   const saved = loadFromLocalStorage<FJFile[]>('fj-ide-files');
   if (saved?.length) return { files: saved, activeId: saved[0].id };
   const def = makeDefaultFile();
@@ -149,7 +134,6 @@ export default function IDE() {
   }, []);
   const wsRef = useRef<WebSocket | null>(null);
   const runStartRef = useRef<number>(0);
-  const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const compileAbortRef = useRef<AbortController | null>(null);
   const importAbortRef = useRef<AbortController | null>(null);
 
@@ -163,24 +147,6 @@ export default function IDE() {
   useEffect(() => {
     saveToLocalStorage('fj-ide-sidebar-collapsed', sidebarCollapsed);
   }, [sidebarCollapsed]);
-
-  // Update the share fragment (debounced 1s). Written to hash, not query
-  // string, so the encoded program doesn't leak into Referer / server logs.
-  useEffect(() => {
-    if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
-    shareTimerRef.current = setTimeout(() => {
-      const encoded = encodeShare(files);
-      if (encoded.length < 200_000) {
-        const url = new URL(window.location.href);
-        url.hash = `share=${encoded}`;
-        url.searchParams.delete('share'); // drop legacy query if present
-        window.history.replaceState(null, '', url.toString());
-      }
-    }, 1000);
-    return () => {
-      if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
-    };
-  }, [files]);
 
   // Cap the terminal at MAX_TERMINAL_LINES — keeps a program that prints
   // millions of lines from hanging the browser by exploding the DOM. The
@@ -336,11 +302,44 @@ export default function IDE() {
     [addLine],
   );
 
-  const copyLink = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href).catch(() => {});
-  }, []);
-
   // ── Compile ───────────────────────────────────────────────────────────────
+
+  /**
+   * Try the cached-compile fast path for built-in examples. Returns the
+   * decoded server payload on a cache hit, null on miss / failure (caller
+   * falls back to /api/compile). Snapshots files BEFORE hashing so an edit
+   * mid-hash can't produce a stale-slug → fresh-content mismatch.
+   */
+  const tryCachedCompile = useCallback(
+    async (
+      snapshot: Array<{ name: string; content: string }>,
+      signal: AbortSignal,
+    ): Promise<{ fjmBase64: string; stderr: string } | null> => {
+      try {
+        const hash = await fingerprintFilesBrowser(snapshot);
+        const entry = EXAMPLE_FJM_INDEX[hash];
+        if (!entry) return null;
+        const res = await fetch('/api/cached-compile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify({ slug: entry.slug }),
+          signal,
+        });
+        if (!res.ok) return null;
+        const data = (await res.json()) as {
+          success: boolean;
+          fjmBase64?: string;
+          stderr?: string;
+        };
+        if (!data.success || !data.fjmBase64) return null;
+        return { fjmBase64: data.fjmBase64, stderr: data.stderr ?? '' };
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') throw err;
+        return null;
+      }
+    },
+    [],
+  );
 
   const doCompile = useCallback(async (): Promise<string | null> => {
     // Abort any in-flight compile — protects against stale-response races on
@@ -353,13 +352,29 @@ export default function IDE() {
     setCompileStatus('compiling');
     setMarkers([]);
     addLine('info', '⟶ Compiling…');
+
+    // Immutable snapshot — any subsequent edit goes into a new array, so the
+    // hash + the POST body stay consistent even if the user types between
+    // the hash compute and the network call.
+    const snapshot = files.map((f) => ({ name: f.name, content: f.content }));
+
     try {
+      // Cache fast path — see lib/example-fjm-cache.ts. Hits /api/cached-compile;
+      // on any failure (including hash miss) returns null and we fall through
+      // to the real compile.
+      const cached = await tryCachedCompile(snapshot, ctrl.signal);
+      if (cached) {
+        if (cached.stderr.trim()) addLine('stderr', cached.stderr.trim());
+        setCompiledFjm(cached.fjmBase64);
+        setCompileStatus('success');
+        addLine('info', '✓ Compilation successful.');
+        return cached.fjmBase64;
+      }
+
       const res = await fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify({
-          files: files.map((f) => ({ name: f.name, content: f.content })),
-        }),
+        body: JSON.stringify({ files: snapshot }),
         signal: ctrl.signal,
       });
       const data = (await res.json()) as {
@@ -390,7 +405,7 @@ export default function IDE() {
       addLine('error', `Compilation error: ${(err as Error).message}`);
       return null;
     }
-  }, [files, addLine, clearTerminal]);
+  }, [files, addLine, clearTerminal, tryCachedCompile]);
 
   const compile = useCallback(async () => {
     await doCompile();
@@ -573,6 +588,44 @@ export default function IDE() {
       clearTerminal();
       setRunStatus('running');
 
+      // Snapshot the file list NOW so an edit mid-flight can't desync the
+      // hash from the bytes we send. The c2fj / runC2fjSource path passes
+      // its own filesOverride, which we pass through unchanged.
+      const snapshot: Array<{ name: string; content: string }> =
+        filesOverride ?? files.map((f) => ({ name: f.name, content: f.content }));
+
+      // Cache fast path for Run FJ. If the snapshot hashes to a known
+      // example, fetch the pre-built .fjm and feed it into the existing
+      // run_fjm WS message. Any failure → fall through to run_fj.
+      let cachedFjmBase64: string | null = null;
+      let cachedStderr = '';
+      if (mode === 'fj') {
+        try {
+          const hash = await fingerprintFilesBrowser(snapshot);
+          const entry = EXAMPLE_FJM_INDEX[hash];
+          if (entry) {
+            const res = await fetch('/api/cached-compile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slug: entry.slug }),
+            });
+            if (res.ok) {
+              const data = (await res.json()) as {
+                success: boolean;
+                fjmBase64?: string;
+                stderr?: string;
+              };
+              if (data.success && data.fjmBase64) {
+                cachedFjmBase64 = data.fjmBase64;
+                cachedStderr = data.stderr ?? '';
+              }
+            }
+          }
+        } catch {
+          // Network blip / parse error → fall through to /api/compile path.
+        }
+      }
+
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/run`);
       wsRef.current = ws;
@@ -587,12 +640,22 @@ export default function IDE() {
               initialStdin: stdinContent || undefined,
             }),
           );
+        } else if (cachedFjmBase64) {
+          if (cachedStderr.trim()) addLine('stderr', cachedStderr.trim());
+          addLine('info', '⟶ Running cached FJM…');
+          ws.send(
+            JSON.stringify({
+              type: 'run_fjm',
+              fjmBase64: cachedFjmBase64,
+              initialStdin: stdinContent || undefined,
+            }),
+          );
         } else {
           addLine('info', '⟶ Compiling and running…');
           ws.send(
             JSON.stringify({
               type: 'run_fj',
-              files: filesOverride ?? files.map((f) => ({ name: f.name, content: f.content })),
+              files: snapshot,
               initialStdin: stdinContent || undefined,
             }),
           );
@@ -758,9 +821,11 @@ export default function IDE() {
   };
 
   return (
-    // .ide-root applies 100dvh (with 100vh fallback) and safe-area padding.
+    // .ide-root applies safe-area padding (iPhone home-indicator / notch).
+    // Height comes from the parent flex container in app/page.tsx — see the
+    // `flex-1 min-h-0` wrapper there.
     <div
-      className="ide-root flex flex-col"
+      className="ide-root flex flex-col flex-1 min-h-0"
       style={{ background: '#1e1e1e', overflow: 'hidden' }}
     >
       <header>
@@ -782,7 +847,6 @@ export default function IDE() {
           onImportError={(msg) => addLine('error', msg)}
           onImportFjm={importFjm}
           onLoadExample={loadExample}
-          onCopyLink={copyLink}
           onOpenDocs={() => { setStlSearch(undefined); setDocsOpen(true); }}
           c2fjOutput={c2fjOutput}
           onRunC2fjSource={runC2fjSource}

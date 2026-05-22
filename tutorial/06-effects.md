@@ -59,26 +59,23 @@ Each effect has a single item in its dependency array. Whenever `files` changes 
 
 ---
 
-## Debouncing the share URL
+## Debouncing — the cancel-and-restart pattern
 
-The IDE encodes your code into the URL so you can share it. But updating the URL on every single keystroke would write thousands of history entries while you type. The solution is **debouncing** — wait until the user has stopped typing for 1 second, then update:
+Saving on *every* keystroke can be wasteful: imagine kicking off an expensive operation (like compressing a large project before persisting it) inside the `[files]` effect above. The solution is **debouncing** — wait until the user has stopped typing for some interval, then run the work exactly once:
 
 ```ts
-// components/IDE.tsx — debounce effect
-useEffect(() => {
-  if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
+// generic debounce effect
+const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  shareTimerRef.current = setTimeout(() => {
-    const encoded = encodeShare(files);
-    if (encoded.length < 200_000) {
-      const url = new URL(window.location.href);
-      url.hash = `share=${encoded}`;
-      window.history.replaceState(null, '', url.toString());
-    }
+useEffect(() => {
+  if (timerRef.current) clearTimeout(timerRef.current);
+
+  timerRef.current = setTimeout(() => {
+    expensiveSave(files);
   }, 1000);  // wait 1 second after the last change
 
   return () => {
-    if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
   };
 }, [files]);
 ```
@@ -88,13 +85,15 @@ Every time `files` changes, the effect:
 2. Starts a fresh 1-second countdown.
 3. Returns a cleanup that cancels the timer when the component unmounts.
 
-If you keep typing, the timer resets each time. Only when you pause for a full second does it run. This keeps the URL history clean.
+If you keep typing, the timer resets each time. Only when you pause for a full second does it run.
+
+The IDE itself uses the plain (non-debounced) form for `fj-ide-files` because writing to `localStorage` is cheap. Debouncing becomes essential the moment the side-effect grows costly (network calls, large serializations, etc.).
 
 ---
 
 ## `useRef` — a ref doesn't trigger re-renders
 
-Notice `shareTimerRef.current` in the example above. `useRef` creates a box that holds a mutable value. Unlike `useState`, changing a ref does **not** trigger a re-render — it just stores a value for the next time the component runs.
+Notice `timerRef.current` in the example above. `useRef` creates a box that holds a mutable value. Unlike `useState`, changing a ref does **not** trigger a re-render — it just stores a value for the next time the component runs.
 
 Refs are used for:
 - Timer handles (so you can cancel them later)

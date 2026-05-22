@@ -24,7 +24,6 @@ interface ToolbarProps {
   onImportError: (message: string) => void;
   onImportFjm: (base64: string) => void;
   onLoadExample: (ex: Example) => void;
-  onCopyLink: () => void;
   onOpenDocs: () => void;
   /** Non-null when a C→FJ conversion result is ready to run directly. */
   c2fjOutput: string | null;
@@ -35,7 +34,7 @@ export default function Toolbar({
   compileStatus, runStatus, compiledFjm,
   onCompile, onDownloadFjm, onDownloadFjProject, onRunFj, onRunFjm, onKill,
   onImportBf, onImportC, onImportFj, onImportError, onImportFjm,
-  onLoadExample, onCopyLink, onOpenDocs,
+  onLoadExample, onOpenDocs,
   c2fjOutput, onRunC2fjSource,
 }: ToolbarProps) {
   const bfInputRef = useRef<HTMLInputElement>(null);
@@ -43,15 +42,8 @@ export default function Toolbar({
   const fjInputRef = useRef<HTMLInputElement>(null);
   const fjmInputRef = useRef<HTMLInputElement>(null);
   const examplesBtnRef = useRef<HTMLButtonElement>(null);
-  const shortBtnRef = useRef<HTMLButtonElement>(null);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
-  type ShortState = 'idle' | 'loading' | 'copied' | 'error' | 'cooldown';
-  const [shortState, setShortState] = useState<ShortState>('idle');
-  const [shortUrl, setShortUrl] = useState('');
-  const [shortTooltipPos, setShortTooltipPos] = useState<{ top: number; left: number } | null>(null);
-  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Recompute dropdown position whenever it opens or the window resizes/scrolls.
   useEffect(() => {
@@ -146,12 +138,6 @@ export default function Toolbar({
     }
   }
 
-  function handleCopyLink() {
-    onCopyLink();
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  }
-
   function handleImportC(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -159,45 +145,6 @@ export default function Toolbar({
     fd.append('file', file);
     onImportC(fd);
     e.target.value = '';
-  }
-
-  async function handleShortLink() {
-    if (shortState === 'loading' || shortState === 'copied' || shortState === 'cooldown') return;
-    const longUrl = window.location.href;
-    if (!longUrl.includes('#share=')) {
-      // Nothing shared yet — fall back to generating the share URL first
-      onCopyLink();
-    }
-    const urlToShorten = window.location.href;
-    setShortState('loading');
-
-    // Position the tooltip below the button
-    const rect = shortBtnRef.current?.getBoundingClientRect();
-    if (rect) setShortTooltipPos({ top: rect.bottom + 6, left: rect.left });
-
-    try {
-      const res = await fetch('https://spoo.me/', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ url: urlToShorten }),
-      });
-      if (!res.ok) throw new Error(`spoo.me ${res.status}`);
-      const data = await res.json() as { short_url: string };
-      const short = data.short_url;
-      await navigator.clipboard.writeText(short);
-      setShortUrl(short);
-      setShortState('copied');
-
-      // Hide tooltip + enter 30s cooldown
-      setTimeout(() => {
-        setShortState('cooldown');
-        setShortTooltipPos(null);
-        cooldownRef.current = setTimeout(() => setShortState('idle'), 30_000);
-      }, 3000);
-    } catch {
-      setShortState('error');
-      setTimeout(() => setShortState('idle'), 3000);
-    }
   }
 
   return (
@@ -311,49 +258,6 @@ export default function Toolbar({
       )}
 
       <div className="flex-1" />
-
-      {/* Copy link */}
-      <ToolBtn onClick={handleCopyLink} title="Copy shareable link to clipboard">
-        <LinkIcon />
-        {linkCopied ? 'Copied!' : 'Copy Link'}
-      </ToolBtn>
-
-      {/* Short link via spoo.me */}
-      <div className="relative">
-        <ToolBtn
-          ref={shortBtnRef}
-          onClick={handleShortLink}
-          disabled={shortState === 'loading' || shortState === 'copied' || shortState === 'cooldown'}
-          title={
-            shortState === 'cooldown' ? 'Please wait before generating another short link' :
-            'Shorten link via spoo.me and copy to clipboard'
-          }
-        >
-          <ScissorsIcon />
-          {shortState === 'loading' ? 'Shortening…' :
-           shortState === 'error'   ? 'Failed' :
-           shortState === 'cooldown' ? 'Short Link' :
-           'Short Link'}
-        </ToolBtn>
-        {/* Tooltip: appears above button when copied, portalled to avoid overflow clipping */}
-        {(shortState === 'copied') && shortTooltipPos && createPortal(
-          <div
-            className="fixed text-xs rounded px-2 py-1 shadow-lg pointer-events-none"
-            style={{
-              top: shortTooltipPos.top,
-              left: shortTooltipPos.left,
-              background: '#1e1e1e',
-              border: '1px solid #454545',
-              color: '#73c991',
-              whiteSpace: 'nowrap',
-              zIndex: 60,
-            }}
-          >
-            ✓ Copied — {shortUrl}
-          </div>,
-          document.body,
-        )}
-      </div>
 
       <div className="w-px h-5 mx-1" style={{ background: '#555' }} />
 
@@ -506,25 +410,6 @@ function StarIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#e8c47a" strokeWidth="1.5">
       <path d="M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3 1.5-5L1 6h5z" />
-    </svg>
-  );
-}
-
-function LinkIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#cccccc" strokeWidth="1.5">
-      <path d="M7 9a3 3 0 0 0 4.3.3l2-2a3 3 0 0 0-4.2-4.2L7.8 4.4" />
-      <path d="M9 7a3 3 0 0 0-4.3-.3l-2 2a3 3 0 0 0 4.2 4.2l1.3-1.3" />
-    </svg>
-  );
-}
-
-function ScissorsIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#cccccc" strokeWidth="1.5">
-      <circle cx="4" cy="4" r="2" />
-      <circle cx="4" cy="12" r="2" />
-      <path d="M6 4.5L14 9M6 11.5L14 7" />
     </svg>
   );
 }

@@ -521,7 +521,7 @@ prompt_string:  bit.str ">  "
 
   // ── 9. Prime Sieve ────────────────────────────────────────────────────────
   {
-    name: 'Prime Sieve',
+    name: '🚀 Prime Sieve',
     description: 'Find primes up to a given input.',
     files: [
       {
