@@ -6,7 +6,7 @@ describe('EXAMPLES catalog', () => {
   it('contains Hello World and at least 10 entries', () => {
     const names = EXAMPLES.map((e) => e.name);
     expect(names).toContain('Hello World');
-    expect(names).toContain('Prime Sieve');
+    expect(names).toContain('🚀 Prime Sieve');
     expect(names).toContain('Multi-file Compilation');
     expect(names.length).toBeGreaterThanOrEqual(10);
   });
@@ -59,7 +59,7 @@ describe('EXAMPLES catalog', () => {
   });
 
   it('Prime Sieve example implements the Sieve of Eratosthenes and prints primes', () => {
-    const ex = EXAMPLES.find((e) => e.name === 'Prime Sieve')!;
+    const ex = EXAMPLES.find((e) => e.name === '🚀 Prime Sieve')!;
     expect(ex.files.length).toBe(1);
     const src = ex.files[0].content;
     // Modern sieve uses startup_and_init_all instead of bare startup

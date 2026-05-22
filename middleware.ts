@@ -40,7 +40,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  `connect-src 'self' ws: wss: https://spoo.me ${ALLOWED_CONNECT}`.trim(),
+  `connect-src 'self' ws: wss: ${ALLOWED_CONNECT}`.trim(),
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",

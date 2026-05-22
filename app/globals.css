@@ -51,20 +51,27 @@ html, body {
 }
 
 /**
- * .ide-root — outermost IDE container.
+ * .app-root — outermost full-viewport flex column wrapping IDE + Footer.
  *
  * Two-value height cascade: browsers that understand dvh (dynamic viewport
- * height) use it; older browsers keep 100vh.  dvh shrinks/grows as the iOS
- * Safari address-bar and toolbar animate in/out, so the IDE always fills
- * exactly the *visible* area and the bottom is never hidden behind the
+ * height) use it; older browsers keep 100vh. dvh shrinks/grows as the iOS
+ * Safari address-bar / toolbar animate in/out, so the page always fills
+ * exactly the *visible* area and the footer is never hidden behind the
  * browser chrome.
- *
- * padding-bottom respects the iPhone home-indicator safe area (requires
- * viewport-fit=cover in the <meta viewport> tag).
  */
-.ide-root {
+.app-root {
   height: 100vh;
   height: 100dvh; /* browsers that support dvh use it; others keep 100vh */
+}
+
+/**
+ * .ide-root — IDE container that sits inside the .app-root flex column.
+ *
+ * Height comes from `flex-1 min-h-0` in `app/page.tsx`. padding respects
+ * the iPhone home-indicator / notch safe areas (requires viewport-fit=cover
+ * in the <meta viewport> tag).
+ */
+.ide-root {
   padding-bottom: env(safe-area-inset-bottom);
   padding-left:   env(safe-area-inset-left);
   padding-right:  env(safe-area-inset-right);

@@ -18,7 +18,7 @@ const SITE_URL = 'https://fj.tomhe.app';
 export const metadata: Metadata = {
   title: 'FlipJump IDE',
   description:
-    'Online IDE for the FlipJump esoteric programming language — write, compile, and run FJ programs directly in your browser. Includes a built-in standard-library viewer, multi-file projects, BF→FJ and C→FJ converters, and shareable links.',
+    'Online IDE for the FlipJump esoteric programming language — write, compile, and run FJ programs directly in your browser. Includes a built-in standard-library viewer, multi-file projects, and BF→FJ and C→FJ converters.',
   keywords: [
     'FlipJump', 'flip-jump', 'FJ', 'esoteric programming', 'esolang',
     'online IDE', 'compiler', 'WebAssembly', 'bit manipulation',

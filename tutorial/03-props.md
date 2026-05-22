@@ -42,7 +42,6 @@ interface ToolbarProps {
   onImportFj: (files: Array<{ name: string; content: string }>) => void;
   onImportFjm: (base64: string) => void;
   onLoadExample: (ex: Example) => void;
-  onCopyLink: () => void;
   onOpenDocs: () => void;
   c2fjOutput: string | null;
   onRunC2fjSource: () => void;
@@ -75,7 +74,6 @@ Here is where the IDE parent renders the Toolbar and fills in all those props:
   onImportFj={importFjFiles}
   onImportFjm={importFjm}
   onLoadExample={loadExample}
-  onCopyLink={copyLink}
   onOpenDocs={() => setDocsOpen(true)}
   c2fjOutput={c2fjOutput}
   onRunC2fjSource={runC2fjSource}

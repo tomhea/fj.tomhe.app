@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import Toolbar from '@/components/Toolbar';
 import { EXAMPLES } from '@/lib/examples';
 import type { CompileStatus, RunStatus } from '@/lib/types';
-
-const noop = () => {};
 
 function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
   return {
@@ -24,7 +22,6 @@ function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
     onImportError: vi.fn(),
     onImportFjm: vi.fn(),
     onLoadExample: vi.fn(),
-    onCopyLink: vi.fn(),
     onOpenDocs: vi.fn(),
     c2fjOutput: null,
     onRunC2fjSource: vi.fn(),
@@ -104,20 +101,16 @@ describe('Toolbar', () => {
     expect(screen.queryByText(EXAMPLES[1].name)).toBeNull();
   });
 
-  it('shows "Copied!" on Copy Link and reverts after timeout', async () => {
-    vi.useFakeTimers();
-    const onCopyLink = vi.fn();
-    render(<Toolbar {...makeProps({ onCopyLink })} />);
-    const btn = screen.getByTitle('Copy shareable link to clipboard');
-    expect(btn.textContent).toContain('Copy Link');
+  it('does not render a Copy Link button (share feature removed)', () => {
+    render(<Toolbar {...makeProps()} />);
+    expect(screen.queryByText('Copy Link')).toBeNull();
+    expect(screen.queryByText('Copied!')).toBeNull();
+  });
 
-    fireEvent.click(btn);
-    expect(onCopyLink).toHaveBeenCalledOnce();
-    expect(btn.textContent).toContain('Copied!');
-
-    await act(async () => { vi.advanceTimersByTime(2001); });
-    expect(btn.textContent).toContain('Copy Link');
-    vi.useRealTimers();
+  it('does not render a Short Link button (spoo.me removed)', () => {
+    render(<Toolbar {...makeProps()} />);
+    expect(screen.queryByText('Short Link')).toBeNull();
+    expect(screen.queryByText('Shortening…')).toBeNull();
   });
 
   it('calls onOpenDocs when Docs is clicked', () => {
