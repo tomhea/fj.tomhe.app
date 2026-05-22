@@ -387,7 +387,7 @@ export default function StlViewer({ initialSearch, searchTick }: { initialSearch
             )}
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-sm" style={{ color: '#555' }}>
+          <div className="flex-1 flex items-center justify-center text-sm" style={{ color: '#9e9e9e' }}>
             Select a file from the tree to view it
           </div>
         )}

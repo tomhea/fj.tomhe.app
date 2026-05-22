@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { freshSession, waitForTerminal } from './_helpers';
+import { freshSession, terminalText, waitForTerminal } from './_helpers';
 
 // The cached-examples flow depends on `public/example-fjms/manifest.json`
 // being present. In CI the prebuild step (`tsx scripts/build-example-index.ts`)
@@ -55,14 +55,21 @@ test.describe('Cached example .fjm path', () => {
       localStorage.setItem('fj-visited', '1');
     });
 
+    // Run-FJ goes through the /ws/run WebSocket, never the /api/compile HTTP
+    // route (that route is only used by the separate Compile FJ→FJM button).
+    // So /api/compile request count cannot tell us whether the cache hit or
+    // missed.  What we CAN observe:
+    //   - /api/cached-compile is only fetched when the file hash matches a
+    //     known example in EXAMPLE_FJM_INDEX (tryCachedCompile in IDE.tsx
+    //     short-circuits to null otherwise). After we edit the file the hash
+    //     no longer matches, so this fetch must NOT happen on a MISS.
+    //   - The "(cached)" timing markers are produced ONLY by the cached path
+    //     (see lib/example-fjm-cache-server.ts). On a MISS the terminal must
+    //     NOT contain "(cached)".
     const cachedHits: string[] = [];
-    const compileHits: string[] = [];
     page.on('request', (req) => {
       const url = req.url();
-      // Order matters — /api/cached-compile contains "/api/compile" as a
-      // substring, so we must check the more-specific URL first.
       if (url.includes('/api/cached-compile')) cachedHits.push(url);
-      else if (/\/api\/compile(?:[?#]|$)/.test(url)) compileHits.push(url);
     });
 
     await freshSession(page);
@@ -70,18 +77,30 @@ test.describe('Cached example .fjm path', () => {
     await page.locator('button[title="Load a built-in example"]').click();
     await page.locator('button:has-text("Hello World")').click();
 
-    // Touch the editor to invalidate the cache hash.
+    // Invalidate the cache hash by appending a single space at the end of
+    // the file. We previously used `keyboard.type(' // NOT-CACHED')`, but
+    // Monaco occasionally swallows characters mid-token when fired without a
+    // delay (we saw "NOACHED" instead of "NOT-CACHED" in CI, which fj then
+    // parsed as a macro name and the test exited with code 1). A trailing
+    // space is the smallest, safest hash-invalidating edit.
     await page.locator('.monaco-editor').click();
-    await page.keyboard.type(' // NOT-CACHED');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' ');
 
     // Reset request log so we only count THIS run's requests.
     cachedHits.length = 0;
-    compileHits.length = 0;
 
     await page.locator('button[title="Compile and run FJ online"]').click();
     await waitForTerminal(page, /Process exited \(code 0\)/);
 
-    expect(compileHits.length).toBeGreaterThan(0);
+    // The edited file's hash is not in EXAMPLE_FJM_INDEX, so the cache probe
+    // must short-circuit before fetch — zero requests to /api/cached-compile.
     expect(cachedHits.length).toBe(0);
+
+    // The (cached) marker is emitted ONLY on cache hits by
+    // lib/example-fjm-cache-server.ts. After editing the source the hash no
+    // longer matches the manifest, so the terminal MUST NOT contain it.
+    const txt = await terminalText(page);
+    expect(txt).not.toMatch(/\(cached\)/);
   });
 });
