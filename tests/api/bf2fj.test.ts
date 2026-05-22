@@ -42,6 +42,19 @@ describe('POST /api/bf2fj', () => {
       expect(json.error).toMatch(/X-Requested-With/i);
     });
 
+    it('returns 503 when the global concurrency cap is exhausted (T2)', async () => {
+      const { acquireJob, releaseJob } = await import('@/lib/concurrency');
+      let acquired = 0;
+      while (acquireJob()) acquired++;
+      try {
+        const { status, json } = await call({ content: '+' });
+        expect(status).toBe(503);
+        expect(json.error).toMatch(/busy/i);
+      } finally {
+        for (let i = 0; i < acquired; i++) releaseJob();
+      }
+    });
+
     it('rejects empty content', async () => {
       const { status, json } = await call({});
       expect(status).toBe(400);

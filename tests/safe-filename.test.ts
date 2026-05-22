@@ -52,6 +52,17 @@ describe('isSafeCFilename', () => {
     ['main.txt', false],
     ['', false],
     ['.c', false],
+    // WIN_RESERVED cases
+    ['CON.c', false],
+    ['nul.cpp', false],
+    ['COM1.h', false],
+    ['LPT9.cc', false],
+    ['PRN.cxx', false],
+    ['conscript.c', true],   // not reserved — 'con' is just a prefix
+    ['console.cpp', true],   // not reserved
+    ['aCON.c', true],        // doesn't start with CON
+    ['com0.c', true],        // COM0 is not a Windows reserved name
+    ['lpt0.h', true],        // LPT0 is not a Windows reserved name
   ];
 
   for (const [name, expected] of cases) {

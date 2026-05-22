@@ -211,6 +211,36 @@ describe('POST /api/c2fj', () => {
       expect(json.error).toMatch(/no file/i);
     });
 
+    it('returns 503 when the global concurrency cap is exhausted (T2)', async () => {
+      const { acquireJob, releaseJob } = await import('@/lib/concurrency');
+      let acquired = 0;
+      while (acquireJob()) acquired++;
+      try {
+        const { status, json } = await callWith(new Blob(['int main(){}']), 'hello.c');
+        expect(status).toBe(503);
+        expect(json.error).toMatch(/busy/i);
+      } finally {
+        for (let i = 0; i < acquired; i++) releaseJob();
+      }
+    });
+
+    it('releases concurrency slot when validation fails after acquireJob (T2)', async () => {
+      const { acquireJob, releaseJob } = await import('@/lib/concurrency');
+      let acquired = 0;
+      while (acquireJob()) acquired++;
+      releaseJob(); acquired--;
+      await callWith(new Blob(['int main(){}']), 'bad.txt'); // rejected after acquireJob
+      expect(acquireJob()).toBe(true);
+      releaseJob();
+      for (let i = 0; i < acquired; i++) releaseJob();
+    });
+
+    it.each(['CON.c', 'nul.cpp', 'COM1.h', 'PRN.cc'])('rejects Windows reserved C filename %p (T5)', async (name) => {
+      const { status, json } = await callWith(new Blob(['int main(){}']), name);
+      expect(status).toBe(400);
+      expect(json.error).toMatch(/\.c.*\.cpp.*\.zip/i);
+    });
+
     it('rejects upload > 10 MB', async () => {
       const huge = new Blob([new Uint8Array(11 * 1024 * 1024)]);
       const { status, json } = await callWith(huge, 'big.c');

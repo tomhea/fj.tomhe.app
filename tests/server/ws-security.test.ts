@@ -130,6 +130,21 @@ function collect(ws: WebSocket, timeoutMs = 5_000): Promise<Evt[]> {
   });
 }
 
+describe('HTTP security headers (G2)', () => {
+  it('suppresses X-Powered-By response header', async (ctx) => {
+    if (!serverAvailable) return ctx.skip();
+    const headers = await new Promise<Record<string, string | string[] | undefined>>((resolve, reject) => {
+      const req = httpRequest({ host: 'localhost', port: PORT, path: '/', method: 'GET' }, (res) => {
+        res.resume();
+        resolve(res.headers as Record<string, string | string[] | undefined>);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    expect(headers['x-powered-by']).toBeUndefined();
+  }, TEST_TIMEOUT);
+});
+
 describe('WS security edge cases', () => {
   it('closes the connection when a message exceeds WS_MAX_PAYLOAD (4 MB)', async (ctx) => {
     if (!serverAvailable) return ctx.skip();

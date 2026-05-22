@@ -47,7 +47,7 @@ const CSP = [
   "form-action 'self'",
 ].join('; ');
 
-export function middleware(_req: NextRequest) {
+export function middleware(req: NextRequest) {
   const res = NextResponse.next();
   res.headers.set(
     'Strict-Transport-Security',
@@ -61,6 +61,9 @@ export function middleware(_req: NextRequest) {
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=()',
   );
+  if (req.nextUrl.pathname.startsWith('/api/')) {
+    res.headers.set('Cache-Control', 'no-store');
+  }
   return res;
 }
 
