@@ -754,7 +754,7 @@ export default function IDE() {
         wsRef.current = null;
       };
     },
-    [runStatus, compiledFjm, files, stdinContent, clearTerminal, addLine],
+    [runStatus, compiledFjm, files, stdinContent, clearTerminal, addLine, tryCachedCompile],
   );
 
   const sendStdin = useCallback(
