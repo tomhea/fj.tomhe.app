@@ -24,8 +24,8 @@ test.describe('Share-URL removal', () => {
     await page.goto('/#share=AAAA');
     await page.waitForLoadState('networkidle');
     await page.locator('.monaco-editor').waitFor({ timeout: 45_000 });
-    // Default project shows hello.fj in the file tree.
-    await expect(page.locator('text=hello.fj')).toBeVisible();
+    // Default project shows main.fj in the file tree.
+    await expect(page.locator('text=main.fj')).toBeVisible();
   });
 
   test('a ?share= query param is ignored — default Hello World loads', async ({ page }) => {
@@ -38,7 +38,7 @@ test.describe('Share-URL removal', () => {
     await page.goto('/?share=AAAA');
     await page.waitForLoadState('networkidle');
     await page.locator('.monaco-editor').waitFor({ timeout: 45_000 });
-    await expect(page.locator('text=hello.fj')).toBeVisible();
+    await expect(page.locator('text=main.fj')).toBeVisible();
   });
 
   test('open files persist across reload via fj-ide-files localStorage', async ({ page }) => {

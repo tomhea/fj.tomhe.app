@@ -807,6 +807,7 @@ export default function IDE() {
       wsRef.current?.close();
       compileAbortRef.current?.abort();
       importAbortRef.current?.abort();
+      runAbortRef.current?.abort();
     };
   }, []);
 

@@ -22,6 +22,15 @@ export const runtime = 'nodejs';
 const MAX_BODY_BYTES = 2 * 1024; // 2 KiB — body is `{"slug":"..."}`
 
 export async function POST(req: NextRequest) {
+  // CSRF: require a non-simple header so cross-origin form/fetch sends a
+  // preflight. Same guard the three sibling API routes use.
+  if (!req.headers.get('x-requested-with')) {
+    return NextResponse.json(
+      { success: false, error: 'Missing X-Requested-With header.' },
+      { status: 400 },
+    );
+  }
+
   const lenHeader = req.headers.get('content-length');
   if (lenHeader !== null) {
     const len = Number(lenHeader);

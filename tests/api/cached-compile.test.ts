@@ -7,10 +7,14 @@ import { POST } from '@/app/api/cached-compile/route';
 const MANIFEST_PATH = join(process.cwd(), 'public/example-fjms/manifest.json');
 const manifestExists = existsSync(MANIFEST_PATH);
 
-function makeReq(body: unknown): NextRequest {
+function makeReq(body: unknown, extraHeaders: Record<string, string> = {}): NextRequest {
   return new NextRequest('http://localhost/api/cached-compile', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-requested-with': 'XMLHttpRequest',
+      ...extraHeaders,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -22,6 +26,20 @@ async function call(body: unknown): Promise<{ status: number; json: any }> {
 
 describe('POST /api/cached-compile', () => {
   describe('validation', () => {
+    it('rejects request missing X-Requested-With (CSRF guard)', async () => {
+      // Build the request manually without the helper's auto-added CSRF header.
+      const req = new NextRequest('http://localhost/api/cached-compile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'hello-world' }),
+      });
+      const res = await POST(req);
+      const json = (await res.json()) as { success: boolean; error?: string };
+      expect(res.status).toBe(400);
+      expect(json.success).toBe(false);
+      expect(json.error).toMatch(/X-Requested-With/i);
+    });
+
     it('rejects missing slug', async () => {
       const { status, json } = await call({});
       expect(status).toBe(400);
