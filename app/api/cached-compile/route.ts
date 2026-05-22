@@ -19,7 +19,20 @@ import { resolveCachedFjmPath } from '@/lib/example-fjm-cache-node';
 
 export const runtime = 'nodejs';
 
+const MAX_BODY_BYTES = 2 * 1024; // 2 KiB — body is `{"slug":"..."}`
+
 export async function POST(req: NextRequest) {
+  const lenHeader = req.headers.get('content-length');
+  if (lenHeader !== null) {
+    const len = Number(lenHeader);
+    if (!Number.isFinite(len) || len < 0 || len > MAX_BODY_BYTES) {
+      return NextResponse.json(
+        { success: false, error: 'Body too large.' },
+        { status: 413 },
+      );
+    }
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -59,11 +72,11 @@ export async function POST(req: NextRequest) {
       stderr: buildCachedStderr(),
     });
   } catch (err) {
+    // Log the underlying error server-side; do NOT leak the absolute path
+    // or `ENOENT`-style detail to the client.
+    console.error('[cached-compile] readFile failed:', (err as Error).message);
     return NextResponse.json(
-      {
-        success: false,
-        error: `Failed to read cached .fjm: ${(err as Error).message}`,
-      },
+      { success: false, error: 'Failed to read cached .fjm.' },
       { status: 500 },
     );
   }

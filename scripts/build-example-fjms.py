@@ -111,6 +111,9 @@ def build_one(entry: dict) -> None:
             timeout=TIMEOUT_S,
             capture_output=True,
             text=True,
+            # errors='replace' so non-UTF-8 bytes from fj don't mask a real
+            # compile failure as a UnicodeDecodeError in this script.
+            errors="replace",
         )
         if result.returncode != 0:
             die(

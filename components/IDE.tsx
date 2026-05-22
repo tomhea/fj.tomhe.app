@@ -136,6 +136,7 @@ export default function IDE() {
   const runStartRef = useRef<number>(0);
   const compileAbortRef = useRef<AbortController | null>(null);
   const importAbortRef = useRef<AbortController | null>(null);
+  const runAbortRef = useRef<AbortController | null>(null);
 
   // Persist on change.
   useEffect(() => {
@@ -578,6 +579,9 @@ export default function IDE() {
   // ── WebSocket Runner ──────────────────────────────────────────────────────
 
   const killProcess = useCallback(() => {
+    // Abort any in-flight cached-compile fetch BEFORE the WS connects, so a
+    // mid-fetch Kill click doesn't leave the request running invisibly.
+    runAbortRef.current?.abort();
     wsRef.current?.send(JSON.stringify({ type: 'kill' }));
   }, []);
 
@@ -597,32 +601,26 @@ export default function IDE() {
       // Cache fast path for Run FJ. If the snapshot hashes to a known
       // example, fetch the pre-built .fjm and feed it into the existing
       // run_fjm WS message. Any failure → fall through to run_fj.
+      // Wired through runAbortRef so killProcess can cancel the fetch.
+      runAbortRef.current?.abort();
+      const runCtrl = new AbortController();
+      runAbortRef.current = runCtrl;
       let cachedFjmBase64: string | null = null;
       let cachedStderr = '';
       if (mode === 'fj') {
         try {
-          const hash = await fingerprintFilesBrowser(snapshot);
-          const entry = EXAMPLE_FJM_INDEX[hash];
-          if (entry) {
-            const res = await fetch('/api/cached-compile', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slug: entry.slug }),
-            });
-            if (res.ok) {
-              const data = (await res.json()) as {
-                success: boolean;
-                fjmBase64?: string;
-                stderr?: string;
-              };
-              if (data.success && data.fjmBase64) {
-                cachedFjmBase64 = data.fjmBase64;
-                cachedStderr = data.stderr ?? '';
-              }
-            }
+          const cached = await tryCachedCompile(snapshot, runCtrl.signal);
+          if (cached) {
+            cachedFjmBase64 = cached.fjmBase64;
+            cachedStderr = cached.stderr;
           }
-        } catch {
-          // Network blip / parse error → fall through to /api/compile path.
+        } catch (err) {
+          if ((err as Error).name === 'AbortError') {
+            setRunStatus('idle');
+            return;
+          }
+          // Anything else: log and fall through to the real run_fj path.
+          console.warn('[run] cached-compile failed:', err);
         }
       }
 
