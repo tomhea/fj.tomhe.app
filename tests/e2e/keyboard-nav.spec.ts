@@ -5,11 +5,17 @@ test.describe('Keyboard navigation', () => {
   test('Escape closes the DocsPanel when it is open', async ({ page }) => {
     await freshSession(page);
     await toolbarBtn(page, 'Open language reference and STL viewer');
-    await page.locator('[role="dialog"]').waitFor();
+    const panel = page.locator('[role="dialog"]');
+    await expect(panel).toBeVisible();
     // Give React's useEffect time to attach the keydown listener before pressing Escape.
     await page.waitForTimeout(200);
     await page.keyboard.press('Escape');
-    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+    // DocsPanel is always mounted — when closed it gets the `inert` boolean
+    // attribute (React sets it as inert="") and a translateX(100%) transform.
+    // `toHaveCount(0)` would never pass because the [role="dialog"] node stays
+    // in the DOM. Match the canonical assertion used by docs-panel.spec.ts
+    // (`closes on Escape`) and verify `inert` instead.
+    await expect(panel).toHaveAttribute('inert', '');
   });
 
   test('Tab is trapped inside DocsPanel while it is open', async ({ page }) => {
