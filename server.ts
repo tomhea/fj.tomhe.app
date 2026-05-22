@@ -242,6 +242,13 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
     child.on('error', (err) => {
       send({ type: 'error', data: `Failed to start process: ${err.message}` });
       proc = null;
+      // Node's `'close'` may or may not fire after `'error'`. If it doesn't,
+      // the runTimeout would later fire on whatever proc is current then —
+      // potentially killing an unrelated subsequent run. Clear it here too.
+      if (runTimeout) {
+        clearTimeout(runTimeout);
+        runTimeout = null;
+      }
     });
 
     runTimeout = setTimeout(() => {
