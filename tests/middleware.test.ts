@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { middleware } from '@/middleware';
 
@@ -48,14 +48,24 @@ describe('middleware CSP headers', () => {
       expect(csp).toMatch(/frame-ancestors\s+'none'/);
     });
 
-    it('does NOT use unsafe-eval in production', () => {
-      // 'unsafe-eval' is required for HMR in dev only. Vitest runs with
-      // NODE_ENV=test (treated as non-prod by middleware), so we assert
-      // the prod-only path by reading the prod CSP string directly.
-      // The dev path may legitimately include 'unsafe-eval'.
-      if (process.env.NODE_ENV === 'production') {
-        expect(csp).not.toMatch(/unsafe-eval/);
-      }
+    it('restricts base-uri and form-action to same-origin', () => {
+      expect(csp).toMatch(/base-uri\s+'self'/);
+      expect(csp).toMatch(/form-action\s+'self'/);
+    });
+
+    it('does NOT use unsafe-eval in production', async () => {
+      // Vitest runs with NODE_ENV=test. Re-import middleware with NODE_ENV=production
+      // to exercise the prod-only CSP branch (no 'unsafe-eval').
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.resetModules();
+      const { middleware: prodMiddleware } = await import('@/middleware');
+      const prodCsp =
+        prodMiddleware(new NextRequest('http://localhost/')).headers.get(
+          'content-security-policy',
+        ) ?? '';
+      expect(prodCsp).not.toMatch(/unsafe-eval/);
+      vi.unstubAllEnvs();
+      vi.resetModules();
     });
   });
 });

@@ -77,6 +77,93 @@ function makeZip(entries: Array<{ name: string; data: Buffer; symlink?: boolean 
   return zip.toBuffer();
 }
 
+// CRC-32 for raw zip construction.
+const CRC32_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c;
+  }
+  return t;
+})();
+function crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC32_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Builds a minimal valid ZIP with correct external file attributes.
+ * AdmZip.addFile() does not reliably preserve attr values above 0x7fffffff,
+ * so symlink detection tests must use this raw builder to set the Unix-mode
+ * attribute (0xa1ff0000 = symlink; 0x81ff0000 = regular file) correctly.
+ */
+function makeRawZip(entries: Array<{ name: string; data: Buffer; externalAttr?: number }>): Buffer {
+  const locals: Buffer[] = [];
+  const offsets: number[] = [];
+  let offset = 0;
+  for (const e of entries) {
+    offsets.push(offset);
+    const name = Buffer.from(e.name);
+    const crc = crc32(e.data);
+    const lhdr = Buffer.alloc(30 + name.length);
+    lhdr.writeUInt32LE(0x04034b50, 0);
+    lhdr.writeUInt16LE(20, 4);
+    lhdr.writeUInt16LE(0, 6);
+    lhdr.writeUInt16LE(0, 8);
+    lhdr.writeUInt16LE(0, 10);
+    lhdr.writeUInt16LE(0, 12);
+    lhdr.writeUInt32LE(crc, 14);
+    lhdr.writeUInt32LE(e.data.length, 18);
+    lhdr.writeUInt32LE(e.data.length, 22);
+    lhdr.writeUInt16LE(name.length, 26);
+    lhdr.writeUInt16LE(0, 28);
+    name.copy(lhdr, 30);
+    const local = Buffer.concat([lhdr, e.data]);
+    locals.push(local);
+    offset += local.length;
+  }
+  const cdOffset = offset;
+  const centrals: Buffer[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const name = Buffer.from(e.name);
+    const crc = crc32(e.data);
+    const chdr = Buffer.alloc(46 + name.length);
+    chdr.writeUInt32LE(0x02014b50, 0);
+    chdr.writeUInt16LE(0x0314, 4);
+    chdr.writeUInt16LE(20, 6);
+    chdr.writeUInt16LE(0, 8);
+    chdr.writeUInt16LE(0, 10);
+    chdr.writeUInt16LE(0, 12);
+    chdr.writeUInt16LE(0, 14);
+    chdr.writeUInt32LE(crc, 16);
+    chdr.writeUInt32LE(e.data.length, 20);
+    chdr.writeUInt32LE(e.data.length, 24);
+    chdr.writeUInt16LE(name.length, 28);
+    chdr.writeUInt16LE(0, 30);
+    chdr.writeUInt16LE(0, 32);
+    chdr.writeUInt16LE(0, 34);
+    chdr.writeUInt16LE(0, 36);
+    chdr.writeUInt32LE((e.externalAttr ?? 0) >>> 0, 38);
+    chdr.writeUInt32LE(offsets[i], 42);
+    name.copy(chdr, 46);
+    centrals.push(chdr);
+  }
+  const cdSize = centrals.reduce((s, c) => s + c.length, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(cdSize, 12);
+  eocd.writeUInt32LE(cdOffset, 16);
+  eocd.writeUInt16LE(0, 20);
+  return Buffer.concat([...locals, ...centrals, eocd]);
+}
+
 describe('POST /api/c2fj', () => {
   describe('validation', () => {
     it('rejects missing X-Requested-With header (CSRF guard)', async () => {
@@ -178,12 +265,15 @@ describe('POST /api/c2fj', () => {
     });
 
     it('skips symlink entries', async () => {
-      const zip = makeZip([
-        { name: 'link.c', data: Buffer.from('/etc/passwd'), symlink: true },
-        { name: 'real.c', data: Buffer.from('int main(){}') },
+      // Use raw zip bytes to set externalAttr = 0xa1ff0000 (Unix symlink mode).
+      // AdmZip.addFile() does not reliably preserve attr > 0x7fffffff, so
+      // makeZip() cannot be used here.
+      const zip = makeRawZip([
+        { name: 'link.c', data: Buffer.from('/etc/passwd'), externalAttr: 0xa1ff0000 },
+        { name: 'real.c', data: Buffer.from('int main(){}'), externalAttr: 0x81ff0000 },
       ]);
       const { json } = await callWith(new Blob([new Uint8Array(zip)]), 'sym.zip');
-      // Symlink dropped; real.c remains.
+      // Symlink entry is skipped; real.c is extracted and c2fj runs.
       expect(json.success).toBe(true);
     });
 
