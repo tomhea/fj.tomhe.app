@@ -72,13 +72,27 @@ jobs:
             # nvm init — bails early on `[ -z "$PS1" ] && return` and `npm`
             # never lands on PATH. Source nvm.sh explicitly here so `npm ci`
             # below can find it.
+            #
+            # `set +e` around the source: nvm.sh's auto-use path can legitimately
+            # exit non-zero on a host whose default alias is missing or whose
+            # current symlink is broken (nvm-sh/nvm#2429). Under `set -e` that
+            # aborts the deploy with no diagnostic of its own. Drop strict
+            # mode just for the source, then check `npm` is on PATH afterwards
+            # — THAT is the diagnostic we actually want.
+            set +e
             export NVM_DIR="$HOME/.nvm"
             # shellcheck disable=SC1091
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            set -e
+            command -v npm >/dev/null \
+              || { echo "npm not on PATH after sourcing nvm.sh — check default alias on the remote" >&2; exit 1; }
             cd "${WEB_ROOT_PATH}"
             source "${VENV_PATH}/bin/activate"
-            npm config set legacy-peer-deps true
-            npm ci --omit=dev
+            # `npm ci --legacy-peer-deps` instead of `npm config set legacy-peer-deps true`
+            # so we don't mutate the deploy user's global ~/.npmrc on every deploy
+            # (would now hard-fail under `set -e` if that file were ever read-only or
+            # the home directory full).
+            npm ci --legacy-peer-deps --omit=dev
             # Build cached .fjm binaries for built-in examples. The venv
             # provides `fj` (flipjump pip install). Must run AFTER `npm ci`
             # (so dependent tooling is in place) and BEFORE the service

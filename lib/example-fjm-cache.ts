@@ -69,6 +69,13 @@ const rnd = () => Math.floor(Math.random() * 21); // 0..20 inclusive
  * suffixed with `(cached)`. The four phase labels match what real
  * `fj --asm` prints today — kept in sync with the verification noted at
  * the top of this file.
+ *
+ * CONTRACT — load-bearing for IDE.tsx rendering:
+ *   1. Every line starts with exactly two leading spaces. IDE.tsx uses
+ *      `trimEnd()` (not `trim()`) so this indent reaches the terminal
+ *      and the four lines column-align with `fj`'s real output.
+ *   2. The block ends with a trailing `\n`; the consumer trims it.
+ * If you change the leading-space prefix, also update IDE.tsx.
  */
 export function buildCachedStderr(): string {
   return (
