@@ -3,7 +3,7 @@ import { parse } from 'url';
 import next from 'next';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { spawn, ChildProcess } from 'child_process';
-import { writeFile, mkdir, rm } from 'fs/promises';
+import { writeFile, mkdir, rm, readFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { StringDecoder } from 'string_decoder';
@@ -131,7 +131,8 @@ type ServerMsg =
   | { type: 'stdout'; data: string }
   | { type: 'stderr'; data: string }
   | { type: 'exit'; code: number | null; signal?: string | null }
-  | { type: 'error'; data: string };
+  | { type: 'error'; data: string }
+  | { type: 'fjm_compiled'; fjmBase64: string };
 
 // Strict runtime shape check. Without this, fields like msg.stdin can be
 // non-string and crash the process when passed to Buffer.byteLength.
@@ -211,7 +212,16 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
     }
   }
 
-  function attachProc(child: ChildProcess, initialStdin?: string): void {
+  function attachProc(
+    child: ChildProcess,
+    initialStdin?: string,
+    // Best-effort post-exit hook — emit any extra server-side messages here
+    // (e.g. `fjm_compiled` carrying the bytes of the compiled .fjm so the
+    // client can show the "Run FJM" button). Runs AFTER the stream tails
+    // are flushed and BEFORE the `exit` message, so the client receives
+    // any auxiliary messages while still in the "running" state.
+    onClose?: () => Promise<void>,
+  ): void {
     proc = child;
     send({ type: 'started' });
     if (initialStdin && child.stdin?.writable) {
@@ -232,11 +242,18 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
       if (text) send({ type: 'stderr', data: sanitizeStderr(text) });
     });
 
-    child.on('close', (code, signal) => {
+    child.on('close', async (code, signal) => {
       const tailOut = outDec.end();
       if (tailOut) send({ type: 'stdout', data: tailOut });
       const tailErr = errDec.end();
       if (tailErr) send({ type: 'stderr', data: sanitizeStderr(tailErr) });
+      if (onClose) {
+        try {
+          await onClose();
+        } catch {
+          /* best-effort — never block the exit message on a hook failure */
+        }
+      }
       send({ type: 'exit', code, signal });
       proc = null;
       if (runTimeout) {
@@ -327,6 +344,13 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             paths.push(p);
           }
 
+          // Per `fj --help`: `fj <files…> -o out.fjm` assembles, SAVES the
+          // compiled binary, AND runs in one step. We pass `-o` so that
+          // after the run completes we can ship the .fjm bytes to the
+          // client (see the onClose hook below) — that's what makes the
+          // Run FJM button appear after a successful Run FJ.
+          const fjmPath = join(tempDir, 'program.fjm');
+
           if (pendingKill) {
             // A kill arrived during the starting window. Don't spawn.
             if (tempDir) {
@@ -335,10 +359,21 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             }
             send({ type: 'exit', code: null, signal: null });
           } else {
-            // Real fj CLI: `fj <files…>` assembles AND runs in one step (default).
             attachProc(
-              spawn(FJ_CMD, paths, { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
+              spawn(FJ_CMD, [...paths, '-o', fjmPath], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
               msg.initialStdin,
+              async () => {
+                // After the fj process exits, surface the compiled .fjm so
+                // the client can store it and show the Run FJM button.
+                // Best-effort: missing file (assembly aborted by kill,
+                // disk error, etc.) just means no fjm_compiled message.
+                try {
+                  const buf = await readFile(fjmPath);
+                  send({ type: 'fjm_compiled', fjmBase64: buf.toString('base64') });
+                } catch {
+                  /* fjm not produced — fine, the Run FJM button just won't appear */
+                }
+              },
             );
           }
         } catch (err) {

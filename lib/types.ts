@@ -84,4 +84,16 @@ export interface WsError {
   data: string;
 }
 
-export type ServerMessage = WsStdout | WsStderr | WsStarted | WsExit | WsError;
+/**
+ * Sent by the server after a `run_fj` (compile + run) child exits.
+ * Carries the bytes of the compiled `.fjm` so the client can store them
+ * in `compiledFjm` state, making the "Run FJM" button visible to re-run
+ * without recompiling. Best-effort: may be omitted if the `.fjm` wasn't
+ * produced (e.g. assembly aborted by kill).
+ */
+export interface WsFjmCompiled {
+  type: 'fjm_compiled';
+  fjmBase64: string;
+}
+
+export type ServerMessage = WsStdout | WsStderr | WsStarted | WsExit | WsError | WsFjmCompiled;
