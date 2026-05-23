@@ -15,8 +15,22 @@
  * Idempotent: writes only when output differs from current contents.
  */
 
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
+
+/**
+ * Atomically read a file's contents, returning null if it doesn't exist.
+ * Replaces the existsSync()+readFileSync() pattern that CodeQL flags as
+ * a `js/file-system-race` TOCTOU window.
+ */
+function readIfExists(path: string): string | null {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw e;
+  }
+}
 import { EXAMPLES } from '../lib/examples';
 import { slugify } from '../lib/example-fjm-cache';
 import { fingerprintFilesNode } from '../lib/example-fjm-cache-node';
@@ -90,12 +104,11 @@ function build() {
   ];
   const indexContent = indexLines.join('\n');
 
-  if (!existsSync(dirname(INDEX_PATH))) {
-    mkdirSync(dirname(INDEX_PATH), { recursive: true });
-  }
-  const existingIndex = existsSync(INDEX_PATH)
-    ? readFileSync(INDEX_PATH, 'utf8')
-    : null;
+  // `mkdirSync` with `recursive: true` is a no-op if the directory exists,
+  // so the previous existsSync() guard was redundant — and dropping it also
+  // removes a TOCTOU window flagged by CodeQL `js/file-system-race`.
+  mkdirSync(dirname(INDEX_PATH), { recursive: true });
+  const existingIndex = readIfExists(INDEX_PATH);
   if (existingIndex !== indexContent) {
     writeFileSync(INDEX_PATH, indexContent, 'utf8');
     process.stdout.write(`wrote ${INDEX_PATH}\n`);
@@ -104,16 +117,12 @@ function build() {
   }
 
   // ─── public/example-fjms/manifest.json ───────────────────────────────
-  if (!existsSync(dirname(MANIFEST_PATH))) {
-    mkdirSync(dirname(MANIFEST_PATH), { recursive: true });
-  }
+  mkdirSync(dirname(MANIFEST_PATH), { recursive: true });
   // Stable key order so successive runs produce byte-identical JSON.
   const stableManifest: Record<string, ManifestEntry> = {};
   for (const h of sortedHashes) stableManifest[h] = manifest[h];
   const manifestContent = JSON.stringify(stableManifest, null, 2) + '\n';
-  const existingManifest = existsSync(MANIFEST_PATH)
-    ? readFileSync(MANIFEST_PATH, 'utf8')
-    : null;
+  const existingManifest = readIfExists(MANIFEST_PATH);
   if (existingManifest !== manifestContent) {
     writeFileSync(MANIFEST_PATH, manifestContent, 'utf8');
     process.stdout.write(`wrote ${MANIFEST_PATH}\n`);

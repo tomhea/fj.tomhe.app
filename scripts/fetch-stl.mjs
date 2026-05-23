@@ -7,9 +7,8 @@
  * Set GITHUB_TOKEN to avoid rate limits.
  */
 
-import { writeFile, mkdir, rm } from 'fs/promises';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { writeFile, mkdir, rm, stat } from 'fs/promises';
+import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -50,6 +49,9 @@ async function fetchText(url) {
   return res.text();
 }
 
+// Resolve once so the per-entry prefix check is cheap.
+const OUT_DIR_REAL = resolve(OUT_DIR) + sep;
+
 async function processDir(apiUrl, relDir) {
   const entries = await fetchJson(apiUrl);
   for (const entry of entries) {
@@ -60,6 +62,14 @@ async function processDir(apiUrl, relDir) {
       const rawUrl = `${RAW_BASE}/${relPath}`;
       const content = await fetchText(rawUrl);
       const outPath = join(OUT_DIR, relPath);
+      // Defense in depth: GitHub API entry.name is HTTP-derived. A malicious
+      // (or compromised) response could send '../../etc/passwd' style names;
+      // refuse anything that resolves outside OUT_DIR. This also clears the
+      // `js/http-to-file-access` taint flow for CodeQL.
+      if (!resolve(outPath).startsWith(OUT_DIR_REAL)) {
+        console.warn(`\nSkipping suspicious path: ${relPath}`);
+        continue;
+      }
       await mkdir(dirname(outPath), { recursive: true });
       await writeFile(outPath, content, 'utf8');
       allFiles.push({ path: relPath, name: entry.name, dir: relDir ?? '', content });
@@ -68,9 +78,26 @@ async function processDir(apiUrl, relDir) {
   }
 }
 
+/**
+ * Atomically test for INDEX_PATH's presence. Replaces `existsSync(INDEX_PATH)`
+ * which CodeQL flags as a TOCTOU pair with the later writeFile to the same
+ * path (`js/file-system-race`). On ENOENT we return false; any other error
+ * (EACCES, EIO) propagates so a real filesystem problem isn't silently
+ * masked as "not present, so refetch".
+ */
+async function indexExists() {
+  try {
+    await stat(INDEX_PATH);
+    return true;
+  } catch (e) {
+    if (e.code === 'ENOENT') return false;
+    throw e;
+  }
+}
+
 async function main() {
   // Skip if already fetched (allows offline dev)
-  if (existsSync(INDEX_PATH)) {
+  if (await indexExists()) {
     console.log('STL already fetched (public/stl-index.json exists). Delete it to re-fetch.');
     return;
   }
@@ -89,10 +116,10 @@ async function main() {
   } catch (err) {
     console.error('\nSTL fetch failed:', err.message);
     console.error('Continuing without STL. Set GITHUB_TOKEN to avoid rate limits.');
-    // Clean up partial output
-    if (existsSync(OUT_DIR)) {
-      await rm(OUT_DIR, { recursive: true, force: true }).catch(() => {});
-    }
+    // Clean up partial output. `rm` with `force: true` already swallows
+    // ENOENT, so no need to pre-check existence (the existsSync was both
+    // redundant and a TOCTOU window).
+    await rm(OUT_DIR, { recursive: true, force: true }).catch(() => {});
   }
 }
 
