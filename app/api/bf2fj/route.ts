@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { writeFile, readFile, mkdir, rm } from 'fs/promises';
+import { writeFile, readFile, mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { v4 as uuidv4 } from 'uuid';
 
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
 import { acquireJob, releaseJob } from '@/lib/concurrency';
@@ -62,8 +61,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    tempDir = join(tmpdir(), `bf2fj-${uuidv4()}`);
-    await mkdir(tempDir, { recursive: true });
+    // `mkdtemp` creates the dir atomically with 0o700 perms and a
+    // crypto-random suffix (closes `js/insecure-temporary-file`).
+    tempDir = await mkdtemp(join(tmpdir(), 'bf2fj-'));
 
     const inPath = join(tempDir, 'input.bf');
     const outPath = join(tempDir, 'output.fj');

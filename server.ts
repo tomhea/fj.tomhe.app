@@ -3,12 +3,11 @@ import { parse } from 'url';
 import next from 'next';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { spawn, ChildProcess } from 'child_process';
-import { writeFile, mkdir, rm, readFile } from 'fs/promises';
+import { writeFile, mkdtemp, rm, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { StringDecoder } from 'string_decoder';
-import { v4 as uuidv4 } from 'uuid';
 import { isSafeFilename } from './lib/safe-filename';
 import { sanitizeStderr } from './lib/sanitize-stderr';
 
@@ -365,8 +364,11 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             }
           }
 
-          tempDir = join(tmpdir(), `fj-run-${uuidv4()}`);
-          await mkdir(tempDir, { recursive: true });
+          // `mkdtemp` atomically creates the dir with 0o700 perms and a
+          // crypto-random suffix — closes the `js/insecure-temporary-file`
+          // window where a predictable name + non-atomic mkdir could let a
+          // local attacker race the write.
+          tempDir = await mkdtemp(join(tmpdir(), 'fj-run-'));
 
           const paths: string[] = [];
           for (const file of msg.files) {
@@ -382,11 +384,11 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
           // Run FJM button appear after a successful Run FJ.
           const fjmPath = join(tempDir, 'program.fjm');
 
-          // Sanity check: tempDir is uuid'd so this should never trip, but
+          // Sanity check: tempDir is fresh from mkdtemp so this should never trip, but
           // an explicit assertion guarantees the `fjm_compiled` message we
           // emit later carries THIS run's binary, not a stale leftover.
           if (existsSync(fjmPath)) {
-            // tempDir is uuid'd so this is practically unreachable, but
+            // tempDir is fresh from mkdtemp so this is practically unreachable, but
             // if it ever does trip we must rm the dir we just created;
             // otherwise this branch silently leaks the tempdir.
             if (tempDir) {
@@ -448,8 +450,7 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             return;
           }
 
-          tempDir = join(tmpdir(), `fj-run-${uuidv4()}`);
-          await mkdir(tempDir, { recursive: true });
+          tempDir = await mkdtemp(join(tmpdir(), 'fj-run-'));
           const fjmPath = join(tempDir, 'program.fjm');
           await writeFile(fjmPath, Buffer.from(msg.fjmBase64, 'base64'));
           if (pendingKill) {
@@ -517,8 +518,7 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             }
           }
 
-          tempDir = join(tmpdir(), `fj-compile-${uuidv4()}`);
-          await mkdir(tempDir, { recursive: true });
+          tempDir = await mkdtemp(join(tmpdir(), 'fj-compile-'));
 
           const paths: string[] = [];
           for (const file of msg.files) {
@@ -528,11 +528,11 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
           }
 
           const fjmPath = join(tempDir, 'program.fjm');
-          // Same sanity check as run_fj: tempDir is uuid'd so this can't
+          // Same sanity check as run_fj: tempDir is fresh from mkdtemp so this can't
           // trip in practice, but the explicit guard makes the invariant
           // that fjm_compiled carries THIS run's binary obvious.
           if (existsSync(fjmPath)) {
-            // tempDir is uuid'd so this is practically unreachable, but
+            // tempDir is fresh from mkdtemp so this is practically unreachable, but
             // if it ever does trip we must rm the dir we just created;
             // otherwise this branch silently leaks the tempdir.
             if (tempDir) {

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { writeFile, readFile, mkdir, rm } from 'fs/promises';
-import { join } from 'path';
+import { writeFile, readFile, mkdtemp, rm } from 'fs/promises';
+import { basename, join, resolve, sep } from 'path';
 import { tmpdir } from 'os';
-import { v4 as uuidv4 } from 'uuid';
 import { isSafeFilename } from '@/lib/safe-filename';
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
 import { acquireJob, releaseJob } from '@/lib/concurrency';
@@ -91,12 +90,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    tempDir = join(tmpdir(), `fj-compile-${uuidv4()}`);
-    await mkdir(tempDir, { recursive: true });
+    // `mkdtemp` creates the dir atomically with 0o700 perms and a
+    // crypto-random suffix (closes `js/insecure-temporary-file`).
+    tempDir = await mkdtemp(join(tmpdir(), 'fj-compile-'));
+    const tempDirReal = resolve(tempDir) + sep;
 
     const paths: string[] = [];
     for (const file of body.files) {
-      const p = join(tempDir, file.name);
+      // Defense in depth: `isSafeFilename` already blocks `..` segments,
+      // but `basename` strips any path component so even a future regex
+      // bug can't leak the write outside tempDir. The resolved-prefix
+      // check is the same belt-and-suspenders pattern c2fj uses for zip
+      // entries — and is the form CodeQL recognizes as a path sanitizer
+      // for `js/http-to-file-access`.
+      const safeName = basename(file.name);
+      const p = join(tempDir, safeName);
+      if (!resolve(p).startsWith(tempDirReal)) {
+        return NextResponse.json(
+          { success: false, error: `Unsafe filename: ${file.name}` },
+          { status: 400 },
+        );
+      }
       await writeFile(p, file.content, 'utf8');
       paths.push(p);
     }
