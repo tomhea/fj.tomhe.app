@@ -318,7 +318,7 @@ const ToolBtn = forwardRef<HTMLButtonElement, {
         if (!disabled && !accent) (e.currentTarget as HTMLButtonElement).style.background = '#3a3a3a';
       }}
       onMouseLeave={(e) => {
-        if (!accent) (e.currentTarget as HTMLButtonElement).style.background = accent ? '#c72e2e' : 'transparent';
+        if (!accent) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
       }}
     >
       {children}
