@@ -4,6 +4,11 @@ on:
   pull_request:
     branches: [main]
 
+# Minimum perms — only checkout reads the repo; the step summary write
+# uses the runner's $GITHUB_STEP_SUMMARY file, not the GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   size:
     name: Check bundle size

@@ -10,6 +10,11 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+# Minimum perms — checkout reads the repo; rsync + ssh-action use deploy
+# secrets, not the GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

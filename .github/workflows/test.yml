@@ -12,6 +12,10 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
+# Minimum perms — only checkout reads the repo; nothing here needs write access.
+permissions:
+  contents: read
+
 jobs:
   unit-and-api:
     name: Unit + API + WS-runner tests
