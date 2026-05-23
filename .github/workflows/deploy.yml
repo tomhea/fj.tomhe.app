@@ -67,6 +67,14 @@ jobs:
             # the unhelpful "/bin/activate: No such file or directory".
             : "${WEB_ROOT_PATH:?WEB_ROOT_PATH secret missing or did not propagate}"
             : "${VENV_PATH:?VENV_PATH secret missing or did not propagate}"
+            # appleboy/ssh-action runs the script in a non-interactive shell,
+            # so the deploy user's ~/.bashrc — which contains the standard
+            # nvm init — bails early on `[ -z "$PS1" ] && return` and `npm`
+            # never lands on PATH. Source nvm.sh explicitly here so `npm ci`
+            # below can find it.
+            export NVM_DIR="$HOME/.nvm"
+            # shellcheck disable=SC1091
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             cd "${WEB_ROOT_PATH}"
             source "${VENV_PATH}/bin/activate"
             npm config set legacy-peer-deps true
