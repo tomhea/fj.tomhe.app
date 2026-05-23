@@ -9,7 +9,7 @@
  * avoid state leakage.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { spawn, ChildProcess, execSync } from 'child_process';
+import { spawn, ChildProcess, execFileSync } from 'child_process';
 import { request as httpRequest } from 'http';
 import WebSocket from 'ws';
 import { join } from 'path';
@@ -22,7 +22,9 @@ const TEST_TIMEOUT = 30_000;
 
 const fjAvailable = (() => {
   try {
-    execSync(`${process.env.FJ_CMD ?? 'fj'} --help`, { stdio: 'pipe' });
+    // execFileSync — see ws-runner.test.ts for the
+    // `js/indirect-command-line-injection` rationale.
+    execFileSync(process.env.FJ_CMD ?? 'fj', ['--help'], { stdio: 'pipe' });
     return true;
   } catch {
     return false;
