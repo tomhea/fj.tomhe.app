@@ -199,6 +199,55 @@ async function runToCompletion(
   });
 }
 
+/**
+ * Drive a single `compile_fj` round-trip to completion. Mirrors
+ * `runToCompletion` but sends the compile-only message. Returns every
+ * event the server emitted up to (and including) the terminating
+ * `exit` / `error`.
+ */
+async function compileToCompletion(
+  files: Array<{ name: string; content: string }>,
+  opts?: { timeoutMs?: number },
+): Promise<CollectedEvent[]> {
+  const events: CollectedEvent[] = [];
+  return new Promise((resolve, reject) => {
+    const ws = openWs();
+    let settled = false;
+    const settle = (out: CollectedEvent[]) => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch {}
+      resolve(out);
+    };
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { ws.close(); } catch {}
+        reject(new Error('compileToCompletion timeout'));
+      }
+    }, opts?.timeoutMs ?? 30_000);
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ type: 'compile_fj', files }));
+    });
+    ws.on('message', (raw) => {
+      try {
+        const ev = JSON.parse(raw.toString()) as CollectedEvent;
+        events.push(ev);
+        if (ev.type === 'exit' || ev.type === 'error') {
+          clearTimeout(timer);
+          settle(events);
+        }
+      } catch {
+        // ignore
+      }
+    });
+    ws.on('error', () => {
+      clearTimeout(timer);
+      settle(events);
+    });
+  });
+}
+
 const HELLO_FJ = [
   'stl.startup',
   "stl.output_char 'H'",
@@ -327,6 +376,131 @@ describe('WS runner', () => {
         const exitIdx = events.findIndex((e) => e.type === 'exit');
         expect(fjmIdx).toBeGreaterThanOrEqual(0);
         expect(fjmIdx).toBeLessThan(exitIdx);
+      },
+    );
+
+    it.skipIf(!fjAvailable)(
+      'compile_fj happy path: streams stdout timings, emits fjm_compiled, exits 0',
+      { timeout: TEST_TIMEOUT },
+      async () => {
+        const events = await compileToCompletion([{ name: 'main.fj', content: HELLO_FJ }]);
+
+        // fj --asm writes its four phase-timing lines to stdout — they
+        // must arrive as live `stdout` messages, not buried in a
+        // post-hoc blob. Asserting on the joined chunks is enough for
+        // a unit test; the e2e test verifies live streaming visually.
+        const stdoutChunks = events.filter((e) => e.type === 'stdout').map((e) => e.data ?? '').join('');
+        expect(stdoutChunks).toMatch(/parsing:\s+0\.\d+s/);
+        expect(stdoutChunks).toMatch(/macro resolve:\s+0\.\d+s/);
+        expect(stdoutChunks).toMatch(/labels resolve:\s+0\.\d+s/);
+        expect(stdoutChunks).toMatch(/create binary:\s+0\.\d+s/);
+
+        // fjm_compiled with valid FJM magic.
+        const fjmCompiled = events.find((e) => e.type === 'fjm_compiled');
+        expect(fjmCompiled?.fjmBase64).toBeTypeOf('string');
+        const header = Buffer.from(fjmCompiled!.fjmBase64!.slice(0, 12), 'base64');
+        expect(header[0]).toBe(0x46);
+        expect(header[1]).toBe(0x4a);
+        expect(header[2]).toBe(0x40);
+
+        // No stdin forwarding for compile_fj — child should exit cleanly.
+        const exit = events.find((e) => e.type === 'exit');
+        expect(exit?.code).toBe(0);
+
+        // Ordering: fjm_compiled MUST arrive before exit.
+        const fjmIdx = events.findIndex((e) => e.type === 'fjm_compiled');
+        const exitIdx = events.findIndex((e) => e.type === 'exit');
+        expect(fjmIdx).toBeGreaterThanOrEqual(0);
+        expect(fjmIdx).toBeLessThan(exitIdx);
+      },
+    );
+
+    it.skipIf(!fjAvailable)(
+      'compile_fj failure path: emits stderr, no fjm_compiled, exits non-zero',
+      { timeout: TEST_TIMEOUT },
+      async () => {
+        // An undefined macro is the standard assembly-failure trigger.
+        const broken = ['stl.startup', 'this.macro.does.not.exist', 'stl.loop', ''].join('\n');
+        const events = await compileToCompletion([{ name: 'broken.fj', content: broken }]);
+
+        const stderrText = events.filter((e) => e.type === 'stderr').map((e) => e.data ?? '').join('');
+        // The sanitizer strips Python traceback frames; the final exception
+        // message ("Macro Resolve Error" / undefined macro) survives.
+        expect(stderrText).toMatch(/macro|undefined|Error/i);
+
+        expect(events.find((e) => e.type === 'fjm_compiled')).toBeUndefined();
+
+        const exit = events.find((e) => e.type === 'exit');
+        expect(exit?.code).not.toBe(0);
+      },
+    );
+
+    it.skipIf(!fjAvailable)(
+      'run_fj: kill DURING run (after assembly) still emits fjm_compiled',
+      { timeout: TEST_TIMEOUT },
+      async () => {
+        // Long-running program: print one char so we know the run phase
+        // has begun (assembly done, .fjm on disk), then block on stdin
+        // via `bit.input`. With no stdin from the test, the read hangs
+        // forever — giving us a deterministic window to send `kill`
+        // while the proc is alive (the cleanup-race scenario the fix
+        // targets). Same input pattern the Echo Stdin example uses.
+        const longProgram = [
+          'stl.startup',
+          "stl.output_char 'a'",
+          'bit.input ascii',
+          'stl.loop',
+          '',
+          'ascii:',
+          '    bit.vec 8, 0',
+          '',
+        ].join('\n');
+
+        const events: CollectedEvent[] = [];
+        const ws = openWs();
+        await new Promise<void>((r) => ws.once('open', () => r()));
+        ws.on('message', (raw) => {
+          try {
+            events.push(JSON.parse(raw.toString()) as CollectedEvent);
+          } catch { /* ignore */ }
+        });
+
+        ws.send(JSON.stringify({ type: 'run_fj', files: [{ name: 'long.fj', content: longProgram }] }));
+
+        // Wait until the program-output `a` has been emitted. That's
+        // strictly AFTER assembly (.fjm written) AND after the run phase
+        // began, so kill from this point on is "kill during run, post-asm"
+        // — the exact scenario the cleanup-race fix targets.
+        await new Promise<void>((r) => {
+          const check = () => {
+            const stdout = events.filter((e) => e.type === 'stdout').map((e) => e.data ?? '').join('');
+            if (stdout.includes('a\n') || /a$/.test(stdout)) r();
+            else setTimeout(check, 50);
+          };
+          check();
+        });
+
+        ws.send(JSON.stringify({ type: 'kill' }));
+
+        // Wait for exit.
+        await new Promise<void>((r) => {
+          const check = () => {
+            if (events.some((e) => e.type === 'exit')) r();
+            else setTimeout(check, 50);
+          };
+          check();
+        });
+
+        // The whole point of the fix: even though the run was killed,
+        // assembly succeeded → fjm file exists → fjm_compiled must be
+        // emitted. Without the cleanup-race fix, this assertion fails
+        // because cleanup() rms tempDir before the close handler reads
+        // the .fjm.
+        const fjmCompiled = events.find((e) => e.type === 'fjm_compiled');
+        expect(fjmCompiled, 'fjm_compiled must arrive even on kill-after-asm').toBeDefined();
+        expect(fjmCompiled?.fjmBase64).toBeTypeOf('string');
+
+        try { ws.close(); } catch {}
       },
     );
 

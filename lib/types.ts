@@ -42,6 +42,18 @@ export interface WsRunFj {
   files: Array<{ name: string; content: string }>;
 }
 
+/**
+ * Compile-only request. Streams `fj --asm` output in real time and emits
+ * `fjm_compiled` carrying the assembled binary before the final `exit`.
+ * Used by the Compile button so phase-timing lines appear as fj prints
+ * them, instead of waiting for the whole compile to finish (which is what
+ * the previous HTTP /api/compile flow did).
+ */
+export interface WsCompileFj {
+  type: 'compile_fj';
+  files: Array<{ name: string; content: string }>;
+}
+
 export interface WsRunFjm {
   type: 'run_fjm';
   fjmBase64: string;
@@ -56,7 +68,7 @@ export interface WsKill {
   type: 'kill';
 }
 
-export type ClientMessage = WsRunFj | WsRunFjm | WsStdin | WsKill;
+export type ClientMessage = WsRunFj | WsCompileFj | WsRunFjm | WsStdin | WsKill;
 
 // WebSocket message types (server → client)
 export interface WsStdout {
