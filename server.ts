@@ -4,6 +4,7 @@ import next from 'next';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { spawn, ChildProcess } from 'child_process';
 import { writeFile, mkdir, rm, readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { StringDecoder } from 'string_decoder';
@@ -112,6 +113,10 @@ interface RunFjMsg {
   files: Array<{ name: string; content: string }>;
   initialStdin?: string;
 }
+interface CompileFjMsg {
+  type: 'compile_fj';
+  files: Array<{ name: string; content: string }>;
+}
 interface RunFjmMsg {
   type: 'run_fjm';
   fjmBase64: string;
@@ -124,7 +129,7 @@ interface StdinMsg {
 interface KillMsg {
   type: 'kill';
 }
-type ClientMsg = RunFjMsg | RunFjmMsg | StdinMsg | KillMsg;
+type ClientMsg = RunFjMsg | CompileFjMsg | RunFjmMsg | StdinMsg | KillMsg;
 
 type ServerMsg =
   | { type: 'started' }
@@ -150,6 +155,16 @@ function isValidMessage(m: unknown): m is ClientMsg {
             typeof (f as { content?: unknown }).content === 'string',
         ) &&
         (msg.initialStdin === undefined || typeof msg.initialStdin === 'string')
+      );
+    case 'compile_fj':
+      return (
+        Array.isArray(msg.files) &&
+        msg.files.every(
+          (f) =>
+            f && typeof f === 'object' &&
+            typeof (f as { name?: unknown }).name === 'string' &&
+            typeof (f as { content?: unknown }).content === 'string',
+        )
       );
     case 'run_fjm':
       return (
@@ -205,7 +220,15 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
         if (!p.killed) p.kill('SIGKILL');
       }, KILL_GRACE_MS);
       killTimeout.unref?.();
+      // NOTE: do NOT rm tempDir here when a proc is alive. attachProc's
+      // close handler runs the onClose hook FIRST (e.g. reading the
+      // assembled .fjm so we can emit `fjm_compiled` even on kill) and
+      // only then rms tempDir. Removing it here would race the readFile
+      // and the `fjm_compiled` message would be lost on kill-after-asm.
+      return;
     }
+    // No live proc → safe to rm tempDir immediately (pre-spawn paths
+    // and post-exit WS-close both end up here).
     if (tempDir) {
       rm(tempDir, { recursive: true, force: true }).catch(() => {});
       tempDir = null;
@@ -259,6 +282,14 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
       if (runTimeout) {
         clearTimeout(runTimeout);
         runTimeout = null;
+      }
+      // tempDir cleanup is now this handler's responsibility (NOT cleanup()'s)
+      // so the onClose hook above gets to read tempDir-contained files (the
+      // assembled .fjm in particular) BEFORE the directory is gone. cleanup()
+      // skips the rm when a proc is alive precisely to leave this to us.
+      if (tempDir) {
+        rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        tempDir = null;
       }
     });
 
@@ -351,6 +382,21 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
           // Run FJM button appear after a successful Run FJ.
           const fjmPath = join(tempDir, 'program.fjm');
 
+          // Sanity check: tempDir is uuid'd so this should never trip, but
+          // an explicit assertion guarantees the `fjm_compiled` message we
+          // emit later carries THIS run's binary, not a stale leftover.
+          if (existsSync(fjmPath)) {
+            // tempDir is uuid'd so this is practically unreachable, but
+            // if it ever does trip we must rm the dir we just created;
+            // otherwise this branch silently leaks the tempdir.
+            if (tempDir) {
+              rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              tempDir = null;
+            }
+            send({ type: 'error', data: 'Internal error: fjm output path pre-exists.' });
+            return;
+          }
+
           if (pendingKill) {
             // A kill arrived during the starting window. Don't spawn.
             if (tempDir) {
@@ -421,6 +467,107 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
                 stdio: ['pipe', 'pipe', 'pipe'],
               }),
               msg.initialStdin,
+            );
+          }
+        } catch (err) {
+          if (tempDir) {
+            rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            tempDir = null;
+          }
+          send({ type: 'error', data: `Setup error: ${(err as Error).message}` });
+        } finally {
+          starting = false;
+          pendingKill = false;
+        }
+      } else if (msg.type === 'compile_fj') {
+        // Mirror of run_fj's validation + spawn pattern, but stops after
+        // assembly (no second `--run` phase, no stdin forwarding).
+        // The IDE's Compile button uses this so phase-timing lines stream
+        // to the terminal as fj prints them, instead of arriving as one
+        // post-hoc block via the old HTTP /api/compile path.
+        if (proc || starting) {
+          send({ type: 'error', data: 'A process is already running.' });
+          return;
+        }
+        starting = true;
+        try {
+          if (!msg.files.length) {
+            send({ type: 'error', data: 'No files provided.' });
+            return;
+          }
+          if (msg.files.length > MAX_FILES) {
+            send({ type: 'error', data: `Too many files (max ${MAX_FILES}).` });
+            return;
+          }
+          let total = 0;
+          for (const file of msg.files) {
+            if (!isSafeFilename(file.name)) {
+              send({ type: 'error', data: `Unsafe filename: ${file.name}` });
+              return;
+            }
+            const size = Buffer.byteLength(file.content);
+            if (size > MAX_FILE_BYTES) {
+              send({ type: 'error', data: `File too large: ${file.name}` });
+              return;
+            }
+            total += size;
+            if (total > MAX_TOTAL_BYTES) {
+              send({ type: 'error', data: 'Combined file size exceeds limit.' });
+              return;
+            }
+          }
+
+          tempDir = join(tmpdir(), `fj-compile-${uuidv4()}`);
+          await mkdir(tempDir, { recursive: true });
+
+          const paths: string[] = [];
+          for (const file of msg.files) {
+            const p = join(tempDir, file.name);
+            await writeFile(p, file.content, 'utf8');
+            paths.push(p);
+          }
+
+          const fjmPath = join(tempDir, 'program.fjm');
+          // Same sanity check as run_fj: tempDir is uuid'd so this can't
+          // trip in practice, but the explicit guard makes the invariant
+          // that fjm_compiled carries THIS run's binary obvious.
+          if (existsSync(fjmPath)) {
+            // tempDir is uuid'd so this is practically unreachable, but
+            // if it ever does trip we must rm the dir we just created;
+            // otherwise this branch silently leaks the tempdir.
+            if (tempDir) {
+              rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              tempDir = null;
+            }
+            send({ type: 'error', data: 'Internal error: fjm output path pre-exists.' });
+            return;
+          }
+
+          if (pendingKill) {
+            if (tempDir) {
+              rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              tempDir = null;
+            }
+            send({ type: 'exit', code: null, signal: null });
+          } else {
+            attachProc(
+              spawn(FJ_CMD, ['--asm', '-o', fjmPath, ...paths], {
+                cwd: tempDir,
+                stdio: ['pipe', 'pipe', 'pipe'],
+              }),
+              undefined,
+              async () => {
+                // Same hook as run_fj: read the .fjm if assembly produced
+                // it. fj writes the file atomically on assembly success;
+                // on failure (parse error, undefined macro, etc.) it's
+                // not produced and we silently skip the message.
+                try {
+                  const buf = await readFile(fjmPath);
+                  send({ type: 'fjm_compiled', fjmBase64: buf.toString('base64') });
+                } catch {
+                  /* assembly failed — no fjm, no message */
+                }
+              },
             );
           }
         } catch (err) {

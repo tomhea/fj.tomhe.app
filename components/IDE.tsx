@@ -168,6 +168,53 @@ export default function IDE() {
 
   const clearTerminal = useCallback(() => setTerminalLines([]), []);
 
+  /**
+   * Stream a raw chunk into the terminal. Chunks are appended to the current
+   * partial line of the same type; a new line is only started when a `\n` is
+   * encountered — so "Hel" + "lo\n" renders as one line "Hello", not two
+   * separate divs. Used by the Run-FJ WS handler AND the new Compile-FJ
+   * WS path, which is why this lives at component scope.
+   */
+  const streamChunk = useCallback((type: 'stdout' | 'stderr', chunk: string) => {
+    // Normalise \r\n and bare \r so fj's progress/timing output doesn't
+    // bleed raw carriage-returns into the display.
+    const text = chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const parts = text.split('\n');
+
+    setTerminalLines((prev) => {
+      const lines = [...prev];
+      const last = lines[lines.length - 1];
+
+      // First part: append to existing partial line of the same type,
+      // or start a new partial line.
+      if (last?.partial && last.type === type) {
+        lines[lines.length - 1] = { ...last, text: last.text + parts[0] };
+      } else {
+        lines.push({ type, text: parts[0], id: nextLineId(), partial: true });
+      }
+
+      // Each subsequent part follows a \n: terminate the current line and
+      // open a new partial one (skip adding a trailing empty part so a
+      // final \n doesn't leave a dangling blank line).
+      for (let i = 1; i < parts.length; i++) {
+        lines[lines.length - 1] = { ...lines[lines.length - 1], partial: false };
+        const isTrailing = i === parts.length - 1 && parts[i] === '';
+        if (!isTrailing) {
+          lines.push({ type, text: parts[i], id: nextLineId(), partial: i === parts.length - 1 });
+        }
+      }
+
+      if (lines.length > MAX_TERMINAL_LINES) {
+        const dropped = lines.length - MAX_TERMINAL_LINES;
+        return [
+          { type: 'info' as const, text: `… ${dropped} earlier line${dropped === 1 ? '' : 's'} truncated`, id: nextLineId() },
+          ...lines.slice(-MAX_TERMINAL_LINES + 1),
+        ];
+      }
+      return lines;
+    });
+  }, []);
+
   // Active view: FJ file or source.
   const activeFile = files.find((f) => f.id === activeFileId) ?? files[0];
   const viewFile: FJFile | undefined =
@@ -308,7 +355,7 @@ export default function IDE() {
   /**
    * Try the cached-compile fast path for built-in examples. Returns the
    * decoded server payload on a cache hit, null on miss / failure (caller
-   * falls back to /api/compile). Snapshots files BEFORE hashing so an edit
+   * falls back to the WS `compile_fj` flow). Snapshots files BEFORE hashing so an edit
    * mid-hash can't produce a stale-slug → fresh-content mismatch.
    */
   const tryCachedCompile = useCallback(
@@ -376,51 +423,111 @@ export default function IDE() {
         return cached.fjmBase64;
       }
 
-      const res = await fetch('/api/compile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify({ files: snapshot }),
-        signal: ctrl.signal,
+      // WS-based compile: streams fj --asm output live (matches Run FJ's
+      // streaming behaviour) and ends with a fjm_compiled message carrying
+      // the assembled binary. The previous HTTP /api/compile path buffered
+      // all output until exit, so phase-timing lines appeared as one block
+      // at the end instead of in real time as fj produced them.
+      const result = await new Promise<string | null>((resolve) => {
+        const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/run`);
+        let fjmBase64: string | null = null;
+        // Buffer stderr for marker parsing — the per-line streamChunk path
+        // can't easily reconstruct the whole message that parseMarkers needs.
+        let stderrBuffer = '';
+        let exited = false;
+        let runSucceeded = false;
+
+        const finish = (out: string | null) => {
+          if (exited) return;
+          exited = true;
+          if (stderrBuffer && !runSucceeded) {
+            // Failure path: feed the buffered stderr into parseMarkers so
+            // editor red squigglies surface on the offending lines.
+            setMarkers(parseMarkers(stderrBuffer));
+          }
+          try { ws.close(); } catch {}
+          resolve(out);
+        };
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'compile_fj', files: snapshot }));
+        };
+        ws.onmessage = (event) => {
+          // Defensive against late frames arriving after finish() — without
+          // this, a stray fjm_compiled or stderr that lands after we've
+          // resolved would clobber the next compile's state.
+          if (exited) return;
+          const msg = JSON.parse(event.data) as ServerMessage;
+          switch (msg.type) {
+            case 'started':
+              break;
+            case 'stdout':
+              // fj --asm writes its four phase-timing lines (parsing,
+              // macro resolve, labels resolve, create binary) to stdout —
+              // stream them live in the neutral stdout lane.
+              streamChunk('stdout', msg.data);
+              break;
+            case 'stderr':
+              // fj only emits stderr on failure (the sanitized exception
+              // message; tracebacks are stripped server-side). Keep red.
+              stderrBuffer += msg.data;
+              streamChunk('stderr', msg.data);
+              break;
+            case 'fjm_compiled':
+              fjmBase64 = msg.fjmBase64;
+              runSucceeded = true;
+              break;
+            case 'exit':
+              if (msg.code === 0 && fjmBase64) {
+                setCompiledFjm(fjmBase64);
+                setCompileStatus('success');
+                addLine('info', '✓ Compilation successful.');
+                finish(fjmBase64);
+              } else {
+                setCompileStatus('error');
+                addLine('error', 'Compilation failed.');
+                finish(null);
+              }
+              break;
+            case 'error':
+              addLine('error', msg.data);
+              setCompileStatus('error');
+              finish(null);
+              break;
+          }
+        };
+        ws.onerror = () => {
+          addLine('error', 'WebSocket error during compile.');
+          setCompileStatus('error');
+          finish(null);
+        };
+        // Without this, a WS that closes WITHOUT firing onerror (clean server
+        // shutdown, browser tab being suspended, intermediate proxy dropping
+        // the connection) would leave the Promise hanging forever. `runOnline`
+        // registers the same handler at its ws.onclose; mirror that here.
+        ws.onclose = () => finish(null);
+
+        const onAbort = () => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ type: 'kill' })); } catch {}
+          }
+          finish(null);
+        };
+        if (ctrl.signal.aborted) {
+          onAbort();
+        } else {
+          ctrl.signal.addEventListener('abort', onAbort, { once: true });
+        }
       });
-      const data = (await res.json()) as {
-        success: boolean;
-        fjmBase64?: string;
-        stderr?: string;
-        error?: string;
-      };
-
-      if (data.stderr?.trimEnd()) {
-        // Success path: the stderr is just `fj --asm`'s four phase-timing
-        // lines (`parsing: 0.0…s`, …). Style those as stdout (neutral) so
-        // they match the cached path and don't look alarming in red.
-        // Failure path: the stderr contains the real compile error from
-        // `fj` — keep that in the stderr lane (red) so it reads as an error.
-        // `trimEnd` (not `trim`) preserves the leading `  ` indent on the
-        // first line so the four lines column-align with `fj`'s output.
-        // Sanitization (stripping Python traceback frames + server paths)
-        // already happens server-side in /api/compile via sanitizeStderr.
-        const lane = data.success ? 'stdout' : 'stderr';
-        addLine(lane, data.stderr.trimEnd());
-        setMarkers(parseMarkers(data.stderr));
-      }
-
-      if (data.success && data.fjmBase64) {
-        setCompiledFjm(data.fjmBase64);
-        setCompileStatus('success');
-        addLine('info', '✓ Compilation successful.');
-        return data.fjmBase64;
-      } else {
-        setCompileStatus('error');
-        addLine('error', data.error ?? 'Compilation failed.');
-        return null;
-      }
+      return result;
     } catch (err) {
       if ((err as Error).name === 'AbortError') return null;
       setCompileStatus('error');
       addLine('error', `Compilation error: ${(err as Error).message}`);
       return null;
     }
-  }, [files, addLine, clearTerminal, tryCachedCompile]);
+  }, [files, addLine, clearTerminal, streamChunk, tryCachedCompile]);
 
   const compile = useCallback(async () => {
     await doCompile();
@@ -682,49 +789,8 @@ export default function IDE() {
         }
       };
 
-      // Stream a raw chunk into the terminal.
-      // Chunks are appended to the current partial line; a new line is only
-      // started when a \n is encountered — so "Hel" + "lo\n" renders as one
-      // line "Hello", not two separate divs.
-      function streamChunk(type: 'stdout' | 'stderr', chunk: string) {
-        // Normalise \r\n and bare \r so fj's progress/timing output doesn't
-        // bleed raw carriage-returns into the display.
-        const text = chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        const parts = text.split('\n');
-
-        setTerminalLines((prev) => {
-          let lines = [...prev];
-          const last = lines[lines.length - 1];
-
-          // First part: append to existing partial line of the same type,
-          // or start a new partial line.
-          if (last?.partial && last.type === type) {
-            lines[lines.length - 1] = { ...last, text: last.text + parts[0] };
-          } else {
-            lines.push({ type, text: parts[0], id: nextLineId(), partial: true });
-          }
-
-          // Each subsequent part follows a \n: terminate the current line and
-          // open a new partial one (skip adding a trailing empty part so a
-          // final \n doesn't leave a dangling blank line).
-          for (let i = 1; i < parts.length; i++) {
-            lines[lines.length - 1] = { ...lines[lines.length - 1], partial: false };
-            const isTrailing = i === parts.length - 1 && parts[i] === '';
-            if (!isTrailing) {
-              lines.push({ type, text: parts[i], id: nextLineId(), partial: i === parts.length - 1 });
-            }
-          }
-
-          if (lines.length > MAX_TERMINAL_LINES) {
-            const dropped = lines.length - MAX_TERMINAL_LINES;
-            return [
-              { type: 'info' as const, text: `… ${dropped} earlier line${dropped === 1 ? '' : 's'} truncated`, id: nextLineId() },
-              ...lines.slice(-MAX_TERMINAL_LINES + 1),
-            ];
-          }
-          return lines;
-        });
-      }
+      // streamChunk lives at component scope so both Run-FJ and the new
+      // Compile-FJ WS path can reuse the same partial-line bookkeeping.
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data) as ServerMessage;
@@ -782,7 +848,7 @@ export default function IDE() {
         wsRef.current = null;
       };
     },
-    [runStatus, compiledFjm, files, stdinContent, clearTerminal, addLine, tryCachedCompile],
+    [runStatus, compiledFjm, files, stdinContent, clearTerminal, addLine, streamChunk, tryCachedCompile],
   );
 
   const sendStdin = useCallback(
