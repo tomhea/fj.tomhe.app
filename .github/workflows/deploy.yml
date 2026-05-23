@@ -45,6 +45,15 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # appleboy/ssh-action does NOT auto-propagate the step's `env:`
+          # block to the remote shell — variable names have to be listed
+          # here explicitly. WEB_ROOT_PATH historically appeared to "work"
+          # only because it also happens to be defined in the remote
+          # machine's profile; VENV_PATH isn't, and that mismatch shipped
+          # an empty value to the remote and made
+          # `source "${VENV_PATH}/bin/activate"` expand to
+          # `source "/bin/activate"`.
+          envs: WEB_ROOT_PATH,VENV_PATH
           script: |
             # `set -e` is critical here: previously the SSH step silently
             # ignored failures of `python scripts/build-example-fjms.py`
@@ -53,6 +62,11 @@ jobs:
             # first post-merge deploy passed CI but shipped a manifest with
             # no .fjm files, and the cache silently fell back to /api/compile.
             set -eo pipefail
+            # Diagnostic guards — if the env propagation breaks again or a
+            # secret is blank, fail loudly with a precise message instead of
+            # the unhelpful "/bin/activate: No such file or directory".
+            : "${WEB_ROOT_PATH:?WEB_ROOT_PATH secret missing or did not propagate}"
+            : "${VENV_PATH:?VENV_PATH secret missing or did not propagate}"
             cd "${WEB_ROOT_PATH}"
             source "${VENV_PATH}/bin/activate"
             npm config set legacy-peer-deps true
