@@ -102,14 +102,20 @@ export async function POST(req: NextRequest) {
     }
 
     const outPath = join(tempDir, 'program.fjm');
-    let stderr = '';
+    let phaseTimings = '';
     try {
       const result = await execFileAsync(
         FJ_CMD,
         ['--asm', '-o', outPath, ...paths],
         { timeout: COMPILE_TIMEOUT_MS, cwd: tempDir, maxBuffer: 4 * 1024 * 1024 },
       );
-      stderr = result.stderr;
+      // `fj --asm` writes the four phase-timing lines (`parsing: …`,
+      // `macro resolve: …`, etc.) to STDOUT — not stderr. stderr only
+      // carries the Python traceback when assembly fails. So on success
+      // we surface stdout (timing); on failure we surface sanitized
+      // stderr (real error). Same JSON field name (`stderr`) for both
+      // keeps the IDE-side handling and existing tests simple.
+      phaseTimings = result.stdout;
     } catch (err: unknown) {
       const e = err as { stderr?: string; message?: string };
       return NextResponse.json({
@@ -122,7 +128,7 @@ export async function POST(req: NextRequest) {
     const fjmBuffer = await readFile(outPath);
     const fjmBase64 = fjmBuffer.toString('base64');
 
-    return NextResponse.json({ success: true, fjmBase64, stderr: sanitizeStderr(stderr) });
+    return NextResponse.json({ success: true, fjmBase64, stderr: sanitizeStderr(phaseTimings) });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: (err as Error).message },
