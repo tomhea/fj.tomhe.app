@@ -46,6 +46,13 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # `set -e` is critical here: previously the SSH step silently
+            # ignored failures of `python scripts/build-example-fjms.py`
+            # because the next command (`sudo systemctl restart fj`) still
+            # exited 0, masking the whole step as success. That's how the
+            # first post-merge deploy passed CI but shipped a manifest with
+            # no .fjm files, and the cache silently fell back to /api/compile.
+            set -eo pipefail
             cd "${WEB_ROOT_PATH}"
             source "${VENV_PATH}/bin/activate"
             npm config set legacy-peer-deps true
@@ -56,7 +63,9 @@ jobs:
             # restart (so the first cache requests after a deploy hit fresh
             # files). The TypeScript half — public/example-fjms/manifest.json
             # — was already rsynced from the GA runner's prebuild step.
-            python scripts/build-example-fjms.py
+            # `python3` (not bare `python`) — the activated venv exposes both,
+            # but explicit is safer if the venv layout ever changes.
+            python3 scripts/build-example-fjms.py
             sudo systemctl restart fj
 
       - name: Smoke test (wait for 200 OK)

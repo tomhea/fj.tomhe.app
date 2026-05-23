@@ -365,7 +365,11 @@ export default function IDE() {
       // to the real compile.
       const cached = await tryCachedCompile(snapshot, ctrl.signal);
       if (cached) {
-        if (cached.stderr.trim()) addLine('stderr', cached.stderr.trim());
+        // Render the cached timing block as stdout (neutral light gray),
+        // not stderr (red) — these lines are informational, not errors.
+        // `trimEnd` only — preserve the leading "  " indent on the first
+        // line so it column-aligns with the rest of the block.
+        if (cached.stderr.trimEnd()) addLine('stdout', cached.stderr.trimEnd());
         setCompiledFjm(cached.fjmBase64);
         setCompileStatus('success');
         addLine('info', '✓ Compilation successful.');
@@ -639,8 +643,12 @@ export default function IDE() {
             }),
           );
         } else if (cachedFjmBase64) {
-          if (cachedStderr.trim()) addLine('stderr', cachedStderr.trim());
-          addLine('info', '⟶ Running cached FJM…');
+          // Render the cache flow identically to a fresh compile from the
+          // user's POV: same "⟶ Compiling and running…" banner, same neutral
+          // (stdout) styling for the four timing lines. `trimEnd` only —
+          // preserve the two-space indent on the first line.
+          addLine('info', '⟶ Compiling and running…');
+          if (cachedStderr.trimEnd()) addLine('stdout', cachedStderr.trimEnd());
           ws.send(
             JSON.stringify({
               type: 'run_fjm',
