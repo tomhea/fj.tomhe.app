@@ -389,8 +389,18 @@ export default function IDE() {
         error?: string;
       };
 
-      if (data.stderr?.trim()) {
-        addLine('stderr', data.stderr.trim());
+      if (data.stderr?.trimEnd()) {
+        // Success path: the stderr is just `fj --asm`'s four phase-timing
+        // lines (`parsing: 0.0…s`, …). Style those as stdout (neutral) so
+        // they match the cached path and don't look alarming in red.
+        // Failure path: the stderr contains the real compile error from
+        // `fj` — keep that in the stderr lane (red) so it reads as an error.
+        // `trimEnd` (not `trim`) preserves the leading `  ` indent on the
+        // first line so the four lines column-align with `fj`'s output.
+        // Sanitization (stripping Python traceback frames + server paths)
+        // already happens server-side in /api/compile via sanitizeStderr.
+        const lane = data.success ? 'stdout' : 'stderr';
+        addLine(lane, data.stderr.trimEnd());
         setMarkers(parseMarkers(data.stderr));
       }
 
@@ -649,6 +659,10 @@ export default function IDE() {
           // preserve the two-space indent on the first line.
           addLine('info', '⟶ Compiling and running…');
           if (cachedStderr.trimEnd()) addLine('stdout', cachedStderr.trimEnd());
+          // Surface the compiled .fjm to client state so the Run FJM button
+          // appears once the run completes. The uncached path gets the same
+          // via the `fjm_compiled` WS message in ws.onmessage above.
+          setCompiledFjm(cachedFjmBase64);
           ws.send(
             JSON.stringify({
               type: 'run_fjm',
@@ -743,6 +757,12 @@ export default function IDE() {
             wsRef.current = null;
             break;
           }
+          case 'fjm_compiled':
+            // Sent by the server after a successful Run FJ. Store the
+            // compiled .fjm so the Toolbar's Run FJM button becomes
+            // visible and the user can re-run without recompiling.
+            setCompiledFjm(msg.fjmBase64);
+            break;
           case 'error':
             addLine('error', msg.data);
             setRunStatus('error');

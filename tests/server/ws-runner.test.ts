@@ -137,6 +137,7 @@ interface CollectedEvent {
   data?: string;
   code?: number | null;
   signal?: string | null;
+  fjmBase64?: string;
 }
 
 async function runToCompletion(
@@ -302,6 +303,30 @@ describe('WS runner', () => {
         expect(stdout).toContain('Hi');
         const exit = events.find((e) => e.type === 'exit');
         expect(exit?.code).toBe(0);
+      },
+    );
+
+    it.skipIf(!fjAvailable)(
+      'run_fj emits fjm_compiled with the assembled .fjm bytes before exit',
+      { timeout: TEST_TIMEOUT },
+      async () => {
+        const events = await runToCompletion([{ name: 'main.fj', content: HELLO_FJ }]);
+        const fjmCompiled = events.find((e) => e.type === 'fjm_compiled');
+        expect(fjmCompiled, 'server must emit fjm_compiled after run_fj').toBeDefined();
+        expect(fjmCompiled?.fjmBase64).toBeTypeOf('string');
+        expect(fjmCompiled!.fjmBase64!.length).toBeGreaterThan(0);
+        // FJM file magic: first four bytes are 'FJ@\0' (0x46 0x4A 0x40 0x00).
+        // Decoding the base64 prefix is enough to confirm it's a real .fjm.
+        const header = Buffer.from(fjmCompiled!.fjmBase64!.slice(0, 12), 'base64');
+        expect(header[0]).toBe(0x46);
+        expect(header[1]).toBe(0x4a);
+        expect(header[2]).toBe(0x40);
+        // Ordering: fjm_compiled must arrive BEFORE the exit message so the
+        // client can store the bytes before the run "completes".
+        const fjmIdx = events.findIndex((e) => e.type === 'fjm_compiled');
+        const exitIdx = events.findIndex((e) => e.type === 'exit');
+        expect(fjmIdx).toBeGreaterThanOrEqual(0);
+        expect(fjmIdx).toBeLessThan(exitIdx);
       },
     );
 
