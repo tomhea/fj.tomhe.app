@@ -386,6 +386,13 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
           // an explicit assertion guarantees the `fjm_compiled` message we
           // emit later carries THIS run's binary, not a stale leftover.
           if (existsSync(fjmPath)) {
+            // tempDir is uuid'd so this is practically unreachable, but
+            // if it ever does trip we must rm the dir we just created;
+            // otherwise this branch silently leaks the tempdir.
+            if (tempDir) {
+              rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              tempDir = null;
+            }
             send({ type: 'error', data: 'Internal error: fjm output path pre-exists.' });
             return;
           }
@@ -525,6 +532,13 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
           // trip in practice, but the explicit guard makes the invariant
           // that fjm_compiled carries THIS run's binary obvious.
           if (existsSync(fjmPath)) {
+            // tempDir is uuid'd so this is practically unreachable, but
+            // if it ever does trip we must rm the dir we just created;
+            // otherwise this branch silently leaks the tempdir.
+            if (tempDir) {
+              rm(tempDir, { recursive: true, force: true }).catch(() => {});
+              tempDir = null;
+            }
             send({ type: 'error', data: 'Internal error: fjm output path pre-exists.' });
             return;
           }

@@ -355,7 +355,7 @@ export default function IDE() {
   /**
    * Try the cached-compile fast path for built-in examples. Returns the
    * decoded server payload on a cache hit, null on miss / failure (caller
-   * falls back to /api/compile). Snapshots files BEFORE hashing so an edit
+   * falls back to the WS `compile_fj` flow). Snapshots files BEFORE hashing so an edit
    * mid-hash can't produce a stale-slug → fresh-content mismatch.
    */
   const tryCachedCompile = useCallback(
@@ -454,6 +454,10 @@ export default function IDE() {
           ws.send(JSON.stringify({ type: 'compile_fj', files: snapshot }));
         };
         ws.onmessage = (event) => {
+          // Defensive against late frames arriving after finish() — without
+          // this, a stray fjm_compiled or stderr that lands after we've
+          // resolved would clobber the next compile's state.
+          if (exited) return;
           const msg = JSON.parse(event.data) as ServerMessage;
           switch (msg.type) {
             case 'started':
@@ -498,6 +502,11 @@ export default function IDE() {
           setCompileStatus('error');
           finish(null);
         };
+        // Without this, a WS that closes WITHOUT firing onerror (clean server
+        // shutdown, browser tab being suspended, intermediate proxy dropping
+        // the connection) would leave the Promise hanging forever. `runOnline`
+        // registers the same handler at its ws.onclose; mirror that here.
+        ws.onclose = () => finish(null);
 
         const onAbort = () => {
           if (ws.readyState === WebSocket.OPEN) {
