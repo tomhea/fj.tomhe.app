@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { writeFile, readFile, mkdir, rm } from 'fs/promises';
+import { writeFile, readFile, mkdir, mkdtemp, rm } from 'fs/promises';
 import { join, dirname, basename, resolve, sep } from 'path';
 import { tmpdir } from 'os';
-import { v4 as uuidv4 } from 'uuid';
 import AdmZip from 'adm-zip';
 import { isSafeCFilename } from '@/lib/safe-filename';
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
@@ -85,8 +84,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    tempDir = join(tmpdir(), `c2fj-${uuidv4()}`);
-    await mkdir(tempDir, { recursive: true });
+    // `mkdtemp` creates the outer dir atomically with 0o700 perms and a
+    // crypto-random suffix (closes `js/insecure-temporary-file`). srcDir
+    // and buildDir below derive from this secure parent, so plain mkdir
+    // is fine — they are no longer joined to `os.tmpdir()` directly.
+    tempDir = await mkdtemp(join(tmpdir(), 'c2fj-'));
     const srcDir = join(tempDir, 'src');
     const buildDir = join(tempDir, 'build');
     await mkdir(srcDir, { recursive: true });

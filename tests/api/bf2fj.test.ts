@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { POST } from '@/app/api/bf2fj/route';
 
 // bf2fj is shipped with some versions of `flipjump` (pip) but not all.
@@ -8,7 +8,9 @@ import { POST } from '@/app/api/bf2fj/route';
 // paths run unconditionally because they never spawn the subprocess.
 const bf2fjAvailable = (() => {
   try {
-    execSync(`${process.env.BF2FJ_CMD ?? 'bf2fj'} --help`, { stdio: 'pipe' });
+    // execFileSync — see compile.test.ts for the
+    // `js/indirect-command-line-injection` rationale.
+    execFileSync(process.env.BF2FJ_CMD ?? 'bf2fj', ['--help'], { stdio: 'pipe' });
     return true;
   } catch {
     return false;

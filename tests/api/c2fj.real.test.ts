@@ -16,14 +16,16 @@
  * / --finish-after fj` flags and reads back `unified.fj`.
  */
 import { describe, it, expect } from 'vitest';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 // We deliberately do not vi.mock child_process here — this test exercises
 // the real binary end-to-end against the route handler.
 const runReal = !!process.env.RUN_REAL_C2FJ_TESTS;
 const c2fjAvailable = runReal && (() => {
   try {
-    execSync(`${process.env.C2FJ_CMD ?? 'c2fj'} --help`, { stdio: 'pipe' });
+    // execFileSync — see compile.test.ts for the
+    // `js/indirect-command-line-injection` rationale.
+    execFileSync(process.env.C2FJ_CMD ?? 'c2fj', ['--help'], { stdio: 'pipe' });
     return true;
   } catch {
     return false;

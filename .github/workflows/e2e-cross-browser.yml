@@ -5,6 +5,11 @@ on:
   schedule:
     - cron: '0 6 * * 0'  # Sunday 6 AM UTC
 
+# Minimum perms — only checkout reads the repo; upload-artifact@v4 uses the
+# actions runtime API, not the GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   cross-browser:
     name: Firefox + WebKit E2E

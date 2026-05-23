@@ -6,7 +6,7 @@ import { freshSession } from './_helpers';
 // filename in it), so a naked text= match collides with the editor token.
 // fileRow targets ONLY the sidebar entry.
 function fileRow(page: Page, name: string): Locator {
-  return page.locator('span.truncate', { hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\\\]\\\\]/g, '\\$&')}$`) });
+  return page.locator('span.truncate', { hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) });
 }
 
 test.describe('File tree', () => {

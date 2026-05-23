@@ -22,7 +22,7 @@ import {
 // Each test gets up to 30 s — the tsx bootstrap and Next.js dev compile
 // are slow, and the kill-mid-run test deliberately sleeps for a while.
 const TEST_TIMEOUT = 30_000;
-import { spawn, ChildProcess, execSync } from 'child_process';
+import { spawn, ChildProcess, execFileSync } from 'child_process';
 import { request as httpRequest } from 'http';
 import WebSocket from 'ws';
 import { join } from 'path';
@@ -259,7 +259,10 @@ const HELLO_FJ = [
 
 const fjAvailable = (() => {
   try {
-    execSync(`${process.env.FJ_CMD ?? 'fj'} --help`, { stdio: 'pipe' });
+    // execFileSync (not execSync with a template literal): keeps the env-var
+    // command out of the shell, so FJ_CMD can't be interpreted as a command
+    // string. Closes `js/indirect-command-line-injection`.
+    execFileSync(process.env.FJ_CMD ?? 'fj', ['--help'], { stdio: 'pipe' });
     return true;
   } catch {
     return false;

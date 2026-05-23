@@ -51,9 +51,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   //   body.files = [{ name: 'hello.fj', content: '...' }, ...]
 
-  // 2. Write each file to a temporary directory on the server
-  const tempDir = join(tmpdir(), `fj-compile-${uuidv4()}`);
-  await mkdir(tempDir, { recursive: true });
+  // 2. Write each file to a temporary directory on the server.
+  //    `mkdtemp` atomically creates a fresh dir with a random suffix
+  //    and 0o700 perms — avoids the predictable-name race window of
+  //    `join(tmpdir(), 'something')` + `mkdir`.
+  const tempDir = await mkdtemp(join(tmpdir(), 'fj-compile-'));
   for (const file of body.files) {
     await writeFile(join(tempDir, file.name), file.content, 'utf8');
   }

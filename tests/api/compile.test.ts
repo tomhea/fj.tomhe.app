@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { POST } from '@/app/api/compile/route';
 
 // fj is shipped with `pip install flipjump`. Locally + CI install it.
 const fjAvailable = (() => {
   try {
-    execSync(`${process.env.FJ_CMD ?? 'fj'} --help`, { stdio: 'pipe' });
+    // execFileSync, not execSync with a template literal — keeps the
+    // env-var command out of the shell. Closes
+    // `js/indirect-command-line-injection`.
+    execFileSync(process.env.FJ_CMD ?? 'fj', ['--help'], { stdio: 'pipe' });
     return true;
   } catch {
     return false;

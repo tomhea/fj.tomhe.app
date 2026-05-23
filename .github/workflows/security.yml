@@ -36,6 +36,10 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
+      # Job-level perms completely REPLACE the workflow-level block — without
+      # `contents: read` here, actions/checkout below has no permission to
+      # read the repo, even though the workflow has `contents: read` at top.
+      contents: read
       # required for all workflows
       security-events: write
 
