@@ -43,6 +43,17 @@ export default function Footer() {
         onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = '#9e9e9e'; }}
       >
         flip-jump
+      </a>{' '}·{' '}
+      <a
+        href="https://fjdocs.tomhe.app"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline"
+        style={{ color: '#9e9e9e' }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = '#e8c47a'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = '#9e9e9e'; }}
+      >
+        fjdocs
       </a>
     </footer>
   );

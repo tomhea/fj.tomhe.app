@@ -179,6 +179,21 @@ function FJReference() {
       className="flex-1 overflow-y-auto px-5 py-4 text-sm"
       style={{ color: '#cccccc', lineHeight: 1.7 }}
     >
+      <Section title="FlipJump Docs">
+        <p>
+          For the full language reference, tutorials, and standard library documentation, visit{' '}
+          <a
+            href="https://fjdocs.tomhe.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: '#569cd6' }}
+          >
+            fjdocs.tomhe.app ↗
+          </a>
+          {' '}— the official FlipJump documentation site.
+        </p>
+      </Section>
+
       <Section title="Core Instruction">
         <p>
           FlipJump has a single instruction: <Code>F ; J</Code>
@@ -188,7 +203,7 @@ function FJReference() {
           <li><b>Jump</b> — unconditionally jump to address <Code>J</Code></li>
         </ul>
         <p className="mt-2" style={{ color: '#888', fontSize: 12 }}>
-          Word width is <Code>@</Code> bits (typically 64). Addresses are word-aligned.
+          Word width is <Code>w</Code> bits (typically 64). Addresses are word-aligned.
         </p>
       </Section>
 
@@ -324,6 +339,16 @@ stl.loop                  // halt`}</Pre>
               style={{ color: '#569cd6' }}
             >
               GitHub: tomhea/flip-jump ↗
+            </a>
+          </li>
+          <li>
+            <a
+              href="https://fjdocs.tomhe.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#569cd6' }}
+            >
+              fjdocs.tomhe.app — Official FlipJump Docs ↗
             </a>
           </li>
         </ul>
