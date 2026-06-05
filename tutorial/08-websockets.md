@@ -1,6 +1,6 @@
 # Chapter 8 — WebSockets: Real-Time
 
-> **Previous:** [Chapter 7 — API Routes](07-api-routes.md) | **Next:** —
+> **Previous:** [Chapter 7 — API Routes](07-api-routes.md) | **Next:** [Chapter 9 — TypeScript](09-typescript.md)
 
 ---
 
