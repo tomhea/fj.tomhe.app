@@ -1,11 +1,19 @@
 # fj.tomhe.app
 
+[![Tests](https://github.com/tomhea/fj.tomhe.app/actions/workflows/test.yml/badge.svg)](https://github.com/tomhea/fj.tomhe.app/actions/workflows/test.yml)
+[![E2E](https://github.com/tomhea/fj.tomhe.app/actions/workflows/e2e-cross-browser.yml/badge.svg)](https://github.com/tomhea/fj.tomhe.app/actions/workflows/e2e-cross-browser.yml)
+[![Security](https://github.com/tomhea/fj.tomhe.app/actions/workflows/security.yml/badge.svg)](https://github.com/tomhea/fj.tomhe.app/actions/workflows/security.yml)
+[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](LICENSE)
+[![Live](https://img.shields.io/badge/live-fj.tomhe.app-brightgreen)](https://fj.tomhe.app)
+
 An online IDE for the [FlipJump](https://esolangs.org/wiki/FlipJump) esoteric
 programming language. Write, compile, and run FJ programs in your browser.
 
+[![fj.tomhe.app screenshot](public/fj.png)](https://fj.tomhe.app)
+
 ## Stack
 
-- Next.js 15 (App Router) + React 19
+- Next.js 16 (App Router) + React 19
 - Monaco editor with a custom FlipJump tokenizer
 - Custom Node server (`server.ts`) hosting a WebSocket runner (`/ws/run`) for
   live stdout/stderr/stdin streaming
@@ -14,7 +22,7 @@ programming language. Write, compile, and run FJ programs in your browser.
 
 ## Prerequisites
 
-1. **Node.js ≥ 20.9** (see `engines` in `package.json`)
+1. **Node.js ≥ 20.19** (see `engines` in `package.json`)
 2. **FlipJump CLIs** — `pip install flipjump c2fj` puts `fj`, `bf2fj`, and
    `c2fj` on PATH.
 3. **For `c2fj` only:** GNU `make` plus a RISC-V toolchain on PATH. Without
@@ -78,7 +86,7 @@ systemctl restart fj`. The host must have a systemd unit named `fj` running
 
 ```
 app/
-  api/{compile,bf2fj,c2fj}/route.ts  # HTTP endpoints — shell out to the CLIs
+  api/{compile,bf2fj,c2fj,cached-compile}/route.ts  # HTTP endpoints — shell out to the CLIs
   layout.tsx · page.tsx              # Page shell (IDE is SSR-disabled)
 components/
   IDE.tsx                            # Top-level state + WS client
@@ -88,7 +96,6 @@ components/
 lib/
   safe-filename.ts                   # Filename allowlist (covered by tests)
   parse-markers.ts                   # stderr → Monaco markers
-  share.ts                           # URL hash share encode/decode
   examples.ts · types.ts
 server.ts                            # Custom Node server + WebSocket runner
 scripts/fetch-stl.mjs                # Pulls public/stl/** from upstream
