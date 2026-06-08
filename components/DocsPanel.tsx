@@ -161,6 +161,20 @@ export default function DocsPanel({ open, onClose, initialStlSearch, initialStlS
               {t === 'ref' ? 'FJ Reference' : 'Standard Library'}
             </button>
           ))}
+          {/* External link styled like an (inactive) tab — opens the official docs site. */}
+          <a
+            href="https://fjdocs.tomhe.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 text-xs transition-colors"
+            style={{
+              color: '#9e9e9e',
+              borderBottom: '2px solid transparent',
+              background: 'transparent',
+            }}
+          >
+            FlipJump Docs ↗
+          </a>
         </div>
 
         {/* Content */}
