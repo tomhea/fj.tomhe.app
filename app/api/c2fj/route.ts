@@ -8,6 +8,7 @@ import AdmZip from 'adm-zip';
 import { isSafeCFilename } from '@/lib/safe-filename';
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
 import { acquireJob, releaseJob } from '@/lib/concurrency';
+import { withResourceLimit } from '@/lib/resource-limit';
 
 const execFileAsync = promisify(execFile);
 
@@ -190,9 +191,12 @@ export async function POST(req: NextRequest) {
 
     let stderr = '';
     try {
+      const spec = withResourceLimit(C2FJ_CMD, [
+        '--build-dir', buildDir, '--unify-fj', '--finish-after', 'fj', inputForC2fj,
+      ]);
       const result = await execFileAsync(
-        C2FJ_CMD,
-        ['--build-dir', buildDir, '--unify-fj', '--finish-after', 'fj', inputForC2fj],
+        spec.cmd,
+        spec.args,
         { timeout: TIMEOUT_MS, cwd: tempDir, maxBuffer: 8 * 1024 * 1024 },
       );
       stderr = result.stderr;
@@ -210,8 +214,11 @@ export async function POST(req: NextRequest) {
     const fjContent = await readFile(outPath, 'utf8');
     return NextResponse.json({ success: true, fjContent, stderr: sanitizeStderr(stderr) });
   } catch (err) {
+    // Log the underlying error server-side; do NOT leak internal detail
+    // (temp paths, stack traces) to the client.
+    console.error('[c2fj] internal error:', (err as Error).message);
     return NextResponse.json(
-      { success: false, error: (err as Error).message },
+      { success: false, error: 'Internal server error.' },
       { status: 500 },
     );
   } finally {

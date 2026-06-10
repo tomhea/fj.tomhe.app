@@ -7,6 +7,7 @@ import { tmpdir } from 'os';
 import { isSafeFilename } from '@/lib/safe-filename';
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
 import { acquireJob, releaseJob } from '@/lib/concurrency';
+import { withResourceLimit } from '@/lib/resource-limit';
 
 const execFileAsync = promisify(execFile);
 
@@ -118,9 +119,10 @@ export async function POST(req: NextRequest) {
     const outPath = join(tempDir, 'program.fjm');
     let phaseTimings = '';
     try {
+      const spec = withResourceLimit(FJ_CMD, ['--asm', '-o', outPath, ...paths]);
       const result = await execFileAsync(
-        FJ_CMD,
-        ['--asm', '-o', outPath, ...paths],
+        spec.cmd,
+        spec.args,
         { timeout: COMPILE_TIMEOUT_MS, cwd: tempDir, maxBuffer: 4 * 1024 * 1024 },
       );
       // `fj --asm` writes the four phase-timing lines (`parsing: …`,
@@ -144,8 +146,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, fjmBase64, stderr: sanitizeStderr(phaseTimings) });
   } catch (err) {
+    // Log the underlying error server-side; do NOT leak internal detail
+    // (temp paths, stack traces) to the client.
+    console.error('[compile] internal error:', (err as Error).message);
     return NextResponse.json(
-      { success: false, error: (err as Error).message },
+      { success: false, error: 'Internal server error.' },
       { status: 500 },
     );
   } finally {

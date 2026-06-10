@@ -67,5 +67,27 @@ describe('middleware CSP headers', () => {
       vi.unstubAllEnvs();
       vi.resetModules();
     });
+
+    it('drops the bare ws:/wss: wildcard from connect-src in production', async () => {
+      // In prod, WebSocket targets are restricted to same-origin ('self',
+      // which covers same-host ws/wss) + configured ALLOWED_ORIGINS — so an
+      // injected script cannot open a socket to an arbitrary exfil host.
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('ALLOWED_ORIGINS', '');
+      vi.resetModules();
+      const { middleware: prodMiddleware } = await import('@/middleware');
+      const prodCsp =
+        prodMiddleware(new NextRequest('http://localhost/')).headers.get(
+          'content-security-policy',
+        ) ?? '';
+      const connectDirective =
+        prodCsp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src')) ?? '';
+      expect(connectDirective).toContain("'self'");
+      // No standalone `ws:` / `wss:` scheme wildcard (a specific wss://host token would be fine).
+      expect(connectDirective).not.toMatch(/\sws:(\s|$)/);
+      expect(connectDirective).not.toMatch(/\swss:(\s|$)/);
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    });
   });
 });

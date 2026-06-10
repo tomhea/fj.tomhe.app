@@ -31,7 +31,7 @@ export default function Footer() {
         onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = '#e8c47a'; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = '#9e9e9e'; }}
       >
-        fj.tomhe.app
+        github
       </a>{' '}·{' '}
       <a
         href="https://github.com/tomhea/flip-jump"
