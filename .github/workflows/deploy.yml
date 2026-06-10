@@ -98,6 +98,11 @@ jobs:
             # (would now hard-fail under `set -e` if that file were ever read-only or
             # the home directory full).
             npm ci --legacy-peer-deps --omit=dev
+            # Keep the venv's FlipJump toolchain (fj, bf2fj, c2fj) in sync with
+            # the pinned versions in requirements.txt. Without this the venv
+            # keeps whatever was installed manually at provision time, and
+            # version bumps in the repo silently never reach production.
+            python3 -m pip install -r requirements.txt
             # Build cached .fjm binaries for built-in examples. The venv
             # provides `fj` (flipjump pip install). Must run AFTER `npm ci`
             # (so dependent tooling is in place) and BEFORE the service

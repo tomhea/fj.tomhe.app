@@ -1,5 +1,7 @@
 # FlipJump Standard Library
 
+> Prefer a click-through tour? Every macro below has a rendered, cross-linked, searchable page on the [**FlipJump Docs**](https://fjdocs.tomhe.app/stl/) site — go peek before you dive into the source.
+
 The stl (**ST**andard-**L**ibrary) is a collection of FlipJump files, each a collection of **highly-optimized** and **[tested](../../tests/README.md)** macros, that are free to use by any FlipJump program that may benefit from it.
 
 It mainly offers binary/hexadecimal data-structures, mathematical and logical operations, conditional jumps, pointers, casting, and input/output.
@@ -43,14 +45,14 @@ Defines the `hex` data-structure (for hexadecimal variables).
 Offers macros for manipulating hexadecimal variables and vectors (i.e. numbers):
 
 - [memory.fj](hex/memory.fj) - hex/vec, zero, xor_by, set, mov, swap
-- [cond_jumps.fj](hex/cond_jumps.fj) - if, cmp
+- [cond_jumps.fj](hex/cond_jumps.fj) - if, cmp, min/max
 - [logics.fj](hex/logics.fj) - xor, or, and, not
-- [input.fj](hex/input.fj) - input bits into hex, input ascii as hex
+- [input.fj](hex/input.fj) - input bits into hex, input ascii as hex, input decimal (signed & unsigned)
 - [output.fj](hex/output.fj) - output hex as bits/bytes; print as hex-number (in ascii)
 - [shifts.fj](hex/shifts.fj) - shift left/right by 1 bit/hex
 - [math_basic.fj](hex/math_basic.fj) - inc/dec, neg, count_bits, sign_extend
 - [math.fj](hex/math.fj) - add/sub, {add/sub}_shifted, {add/sub}_constant
-- [mul.fj](hex/mul.fj) - add_mul, mul (works for signed & unsigned)
+- [mul.fj](hex/mul.fj) - add_mul, mul (works for signed & unsigned), mul10
 - [div.fj](hex/div.fj) - div, idiv (signed)
 - [tables_init.fj](hex/tables_init.fj) - initializes the "results-tables" for the next hex macros: or,and, add,sub, cmp, mul
 - [pointers/](hex/pointers) - hex-vec pointers subdirectory: [flip](hex/pointers/xor_to_pointer.fj), [jump](hex/pointers/basic_pointers.fj), [xor_to](hex/pointers/xor_to_pointer.fj), [xor_from](hex/pointers/xor_from_pointer.fj); [stack](hex/pointers/stack.fj)/[pointers](hex/pointers/basic_pointers.fj) init. [pointer arithmetics](hex/pointers/pointer_arithmetics.fj), [stack arithmetics + push/pop](hex/pointers/stack.fj).
@@ -79,7 +81,7 @@ Every macro is documented with:
 ## Fast search:
 If you want to get to the source of a macro named some_macro (to view the macro's documentation, or its implementation), search in the stl/ folder for `'def some_macro '`.
 
-I created an [autohotkey script](../../ide-extensions/pycharm/fj-pycharm-def-finder.ahk) that jumps to the definition in pycharm by pressing Ctrl+Shift+Click on the macro name, inside the flipjump repo.
+The official [JetBrains](https://plugins.jetbrains.com/plugin/32134-flipjump/reviews) and [VS Code](https://marketplace.visualstudio.com/items?itemName=flipjump.flipjump) plugins let you jump to a macro's definition with Ctrl+Click on the macro name.
 
 
 # The Standard Library Basics

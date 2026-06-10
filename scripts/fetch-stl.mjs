@@ -22,7 +22,7 @@ const STL_PATH = 'flipjump/stl';
 // Bump this when intentionally adopting upstream changes. The committed
 // public/stl/** copy is the source of truth; this script only refreshes
 // it when `public/stl-index.json` is missing.
-const REF = process.env.FJ_STL_REF ?? 'main';
+const REF = process.env.FJ_STL_REF ?? '1.4.0';
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/${REF}/${STL_PATH}`;
 const API_BASE = `https://api.github.com/repos/${REPO}/contents/${STL_PATH}?ref=${encodeURIComponent(REF)}`;
 

@@ -36,12 +36,12 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install flipjump (provides fj; bf2fj is optional)
+      - name: Install FlipJump toolchain (fj, bf2fj, c2fj — pinned in requirements.txt)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           # `fj` is the only required tool; bf2fj-dependent tests auto-skip
-          # when it isn't on PATH (some pip versions ship only `fj`).
+          # when it isn't on PATH.
           fj --help > /dev/null
           if command -v bf2fj > /dev/null; then
             echo "bf2fj available"

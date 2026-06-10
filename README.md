@@ -23,8 +23,8 @@ programming language. Write, compile, and run FJ programs in your browser.
 ## Prerequisites
 
 1. **Node.js ≥ 20.19** (see `engines` in `package.json`)
-2. **FlipJump CLIs** — `pip install flipjump c2fj` puts `fj`, `bf2fj`, and
-   `c2fj` on PATH.
+2. **FlipJump CLIs** — `pip install -r requirements.txt` puts `fj`, `bf2fj`,
+   and `c2fj` on PATH (pinned versions).
 3. **For `c2fj` only:** GNU `make` plus a RISC-V toolchain on PATH. Without
    these, the BF→FJ and assemble/run features still work; only the C→FJ
    import does not.
