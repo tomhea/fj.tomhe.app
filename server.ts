@@ -10,6 +10,7 @@ import { tmpdir } from 'os';
 import { StringDecoder } from 'string_decoder';
 import { isSafeFilename } from './lib/safe-filename';
 import { sanitizeStderr } from './lib/sanitize-stderr';
+import { withResourceLimit } from './lib/resource-limit';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME ?? 'localhost';
@@ -407,8 +408,9 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             }
             send({ type: 'exit', code: null, signal: null });
           } else {
+            const runSpec = withResourceLimit(FJ_CMD, [...paths, '-o', fjmPath]);
             attachProc(
-              spawn(FJ_CMD, [...paths, '-o', fjmPath], { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
+              spawn(runSpec.cmd, runSpec.args, { cwd: tempDir, stdio: ['pipe', 'pipe', 'pipe'] }),
               msg.initialStdin,
               async () => {
                 // After the fj process exits, surface the compiled .fjm so
@@ -462,8 +464,9 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             send({ type: 'exit', code: null, signal: null });
           } else {
             // Real fj CLI: `fj --run <prog.fjm>`.
+            const runFjmSpec = withResourceLimit(FJ_CMD, ['--run', fjmPath]);
             attachProc(
-              spawn(FJ_CMD, ['--run', fjmPath], {
+              spawn(runFjmSpec.cmd, runFjmSpec.args, {
                 cwd: tempDir,
                 stdio: ['pipe', 'pipe', 'pipe'],
               }),
@@ -550,8 +553,9 @@ async function handleRunConnection(ws: WebSocket): Promise<void> {
             }
             send({ type: 'exit', code: null, signal: null });
           } else {
+            const compileSpec = withResourceLimit(FJ_CMD, ['--asm', '-o', fjmPath, ...paths]);
             attachProc(
-              spawn(FJ_CMD, ['--asm', '-o', fjmPath, ...paths], {
+              spawn(compileSpec.cmd, compileSpec.args, {
                 cwd: tempDir,
                 stdio: ['pipe', 'pipe', 'pipe'],
               }),

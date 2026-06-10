@@ -7,6 +7,7 @@ import { tmpdir } from 'os';
 
 import { sanitizeStderr } from '@/lib/sanitize-stderr';
 import { acquireJob, releaseJob } from '@/lib/concurrency';
+import { withResourceLimit } from '@/lib/resource-limit';
 
 const execFileAsync = promisify(execFile);
 
@@ -71,9 +72,10 @@ export async function POST(req: NextRequest) {
 
     let stderr = '';
     try {
+      const spec = withResourceLimit(BF2FJ_CMD, [inPath, '-o', outPath]);
       const result = await execFileAsync(
-        BF2FJ_CMD,
-        [inPath, '-o', outPath],
+        spec.cmd,
+        spec.args,
         { timeout: TIMEOUT_MS, cwd: tempDir, maxBuffer: 4 * 1024 * 1024 },
       );
       stderr = result.stderr;
@@ -89,8 +91,11 @@ export async function POST(req: NextRequest) {
     const fjContent = await readFile(outPath, 'utf8');
     return NextResponse.json({ success: true, fjContent, stderr: sanitizeStderr(stderr) });
   } catch (err) {
+    // Log the underlying error server-side; do NOT leak internal detail
+    // (temp paths, stack traces) to the client.
+    console.error('[bf2fj] internal error:', (err as Error).message);
     return NextResponse.json(
-      { success: false, error: (err as Error).message },
+      { success: false, error: 'Internal server error.' },
       { status: 500 },
     );
   } finally {
