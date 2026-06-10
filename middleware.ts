@@ -18,8 +18,12 @@ import type { NextRequest } from 'next/server';
  * `'unsafe-inline'` for script-src is required by Next.js's bootstrap inline
  * scripts. Tracked for removal via nonce-based CSP.
  *
- * `connect-src` includes `ws:`/`wss:` for the runner WebSocket; deploys at a
- * different host can extend via $ALLOWED_ORIGINS.
+ * `connect-src` allows same-origin (`'self'`, which covers the same-host
+ * `ws:`/`wss:` runner WebSocket in modern browsers) plus any extra hosts
+ * configured via $ALLOWED_ORIGINS. In dev we keep the broad `ws:`/`wss:`
+ * allowance so HMR / wscat against an arbitrary local host still work; in
+ * prod we drop the wildcard so an injected script can't open a WebSocket to
+ * an attacker host for exfiltration.
  */
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -34,13 +38,19 @@ const SCRIPT_SRC = isProd
   ? `script-src 'self' 'unsafe-inline'`
   : `script-src 'self' 'unsafe-inline' 'unsafe-eval'`;
 
+// Dev keeps the permissive ws:/wss: wildcard (local-only, no exfil surface);
+// prod restricts WebSocket targets to same-origin + configured hosts.
+const CONNECT_SRC = isProd
+  ? `connect-src 'self' ${ALLOWED_CONNECT}`.trim()
+  : `connect-src 'self' ws: wss: ${ALLOWED_CONNECT}`.trim();
+
 const CSP = [
   "default-src 'self'",
   SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  `connect-src 'self' ws: wss: ${ALLOWED_CONNECT}`.trim(),
+  CONNECT_SRC,
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",

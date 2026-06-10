@@ -27,6 +27,20 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Force UTF-8 on our own streams. On Windows the console defaults to a legacy
+# code page (e.g. cp1255 on a Hebrew-locale machine) that can't encode the
+# progress arrow below — or a Unicode example name — and the write would raise
+# UnicodeEncodeError, killing this script. That crash is swallowed by the
+# `build-example-fjms-if-fj.mjs` wrapper (it always exits 0), so the failure is
+# silent: the example `.fjm` cache never gets built and the IDE falls back to
+# /api/compile, which also breaks the cached-examples E2E test. errors="replace"
+# is belt-and-suspenders; the guard covers streams that lack reconfigure().
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass
+
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST_PATH = ROOT / "public" / "example-fjms" / "manifest.json"
 OUTPUT_DIR = ROOT / "public" / "example-fjms"
