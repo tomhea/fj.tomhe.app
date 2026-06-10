@@ -200,6 +200,7 @@ function FJReference() {
             href="https://fjdocs.tomhe.app"
             target="_blank"
             rel="noopener noreferrer"
+            className="underline"
             style={{ color: '#569cd6' }}
           >
             fjdocs.tomhe.app ↗
