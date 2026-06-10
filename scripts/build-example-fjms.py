@@ -5,7 +5,7 @@ Build pre-compiled `.fjm` binaries for every example in
 `public/example-fjms/<slug>.fjm`.
 
 This script runs ON THE DEPLOY HOST (not the GitHub Actions runner) because
-it needs the `fj` CLI (provided by `pip install flipjump` inside the venv).
+it needs the `fj` CLI (installed from requirements.txt inside the venv).
 The TS half (`scripts/build-example-index.ts`) runs on the runner and emits
 the manifest; the Python half consumes the manifest here.
 

@@ -3,7 +3,8 @@ import { NextRequest } from 'next/server';
 import { execFileSync } from 'child_process';
 import { POST } from '@/app/api/compile/route';
 
-// fj is shipped with `pip install flipjump`. Locally + CI install it.
+// fj is shipped with the flipjump package (pinned in requirements.txt).
+// Locally + CI install it.
 const fjAvailable = (() => {
   try {
     // execFileSync, not execSync with a template literal — keeps the
