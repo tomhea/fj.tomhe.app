@@ -36,22 +36,30 @@ describe('withResourceLimit', () => {
     expect(await (await load('linux', '-5'))('fj', ['x'])).toEqual({ cmd: 'fj', args: ['x'] });
   });
 
-  it('never wraps on Windows even when a limit is set', async () => {
-    const withResourceLimit = await load('win32', '2000000');
-    expect(withResourceLimit('fj', ['x'])).toEqual({ cmd: 'fj', args: ['x'] });
+  it('never wraps on non-Linux (no prlimit) even when a limit is set', async () => {
+    // prlimit is util-linux — absent on Windows and macOS, so the cap is a
+    // no-op there and the command runs unwrapped.
+    expect(await (await load('win32', '2000000'))('fj', ['x'])).toEqual({ cmd: 'fj', args: ['x'] });
+    expect(await (await load('darwin', '2000000'))('fj', ['x'])).toEqual({ cmd: 'fj', args: ['x'] });
   });
 
-  it('wraps in an injection-safe sh -c ulimit shell on POSIX when set', async () => {
+  it('wraps in a shell-free prlimit invocation on Linux when set', async () => {
     const withResourceLimit = await load('linux', '2000000');
     const spec = withResourceLimit('fj', ['--run', '/tmp/p.fjm']);
-    expect(spec.cmd).toBe('sh');
-    // sh -c <script> <$0> <cmd> <...args>  — cmd+args are positional params,
-    // never interpolated into the script string.
-    expect(spec.args[0]).toBe('-c');
-    expect(spec.args[1]).toContain('ulimit -v 2000000');
-    expect(spec.args[1]).toContain('exec "$@"');
-    expect(spec.args.slice(2)).toEqual(['sh', 'fj', '--run', '/tmp/p.fjm']);
-    // The real argv must NOT appear inside the script string (no injection).
-    expect(spec.args[1]).not.toContain('/tmp/p.fjm');
+    expect(spec.cmd).toBe('prlimit');
+    // prlimit --as=<bytes> -- <cmd> <...args>. No shell: cmd+args follow `--`
+    // as a plain argv, so there is no shell-injection surface.
+    // 2000000 KB * 1024 = 2_048_000_000 bytes.
+    expect(spec.args).toEqual([
+      '--as=2048000000',
+      '--',
+      'fj',
+      '--run',
+      '/tmp/p.fjm',
+    ]);
+    // Crucially, no element is `sh`/`bash` and there is no `-c` shell script —
+    // that is what kept the old wrapper off CodeQL's command-injection radar.
+    expect(spec.args).not.toContain('-c');
+    expect(spec.cmd).not.toMatch(/^(sh|bash)$/);
   });
 });

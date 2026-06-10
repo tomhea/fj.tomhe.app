@@ -58,7 +58,7 @@ Environment variables (see `.env.example`):
 | `ALLOWED_ORIGINS` | (localhost + `https://fj.tomhe.app`) | Comma-separated WebSocket origin allowlist |
 | `TRUST_PROXY` | _(unset)_ | Set to `1` when behind a reverse proxy that owns `X-Forwarded-For` |
 | `API_RATE_LIMIT` | `20` | Max REST API requests per IP per 60 s window |
-| `FJ_MEMORY_LIMIT_KB` | _(unset)_ | POSIX only: per-run virtual-memory cap (`ulimit -v`, KB) for spawned `fj`/`c2fj`/`bf2fj` processes. Bounds OOM-DoS from a memory-hungry program. Unset = no cap. Start generous — Python reserves a large address space up front (e.g. `2000000` ≈ 2 GB) and tune down against real programs. |
+| `FJ_MEMORY_LIMIT_KB` | _(unset)_ | Linux only: per-run virtual-memory cap (RLIMIT_AS via `prlimit`, KB) for spawned `fj`/`c2fj`/`bf2fj` processes. Bounds OOM-DoS from a memory-hungry program. Unset = no cap; ignored on macOS/Windows (no `prlimit`). Needs `prlimit` (util-linux, present by default on Linux). Start generous — Python reserves a large address space up front (e.g. `2000000` ≈ 2 GB) and tune down against real programs. |
 | `FJ_CMD` | `fj` | Path to the `fj` binary |
 | `BF2FJ_CMD` | `bf2fj` | Path to the `bf2fj` binary |
 | `C2FJ_CMD` | `c2fj` | Path to the `c2fj` binary |
