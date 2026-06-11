@@ -81,7 +81,7 @@ The docs site has hundreds of standard-library reference pages, and **nobody wri
 ```python
 # docs/_ext/fj_stl_extract/sphinx_ext.py
 def setup(app):
-    app.add_config_value("fj_stl_root", "../../vendor/flip-jump/flipjump/stl", "env")
+    app.add_config_value("fj_stl_root", "../../vendor/flipjump/flipjump/stl", "env")
     app.add_config_value("fj_stl_output", "stl", "env")
     app.add_lexer("fj", FlipJumpLexer)
     app.connect("builder-inited", _on_builder_inited)

@@ -76,7 +76,7 @@ test.describe('Share-URL removal', () => {
     await expect(footer).toContainText('FlipJump IDE by Tomhe');
 
     const appLink = footer.locator('a[href="https://github.com/tomhea/fj.tomhe.app"]');
-    const fjLink = footer.locator('a[href="https://github.com/tomhea/flip-jump"]');
+    const fjLink = footer.locator('a[href="https://github.com/tomhea/flipjump"]');
     await expect(appLink).toBeVisible();
     await expect(fjLink).toBeVisible();
     // Both open in a new tab.

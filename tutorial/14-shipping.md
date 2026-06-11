@@ -66,9 +66,9 @@ The docs render the FlipJump standard library from its real source. To stay curr
 
 ```ini
 # .gitmodules
-[submodule "vendor/flip-jump"]
-	path = vendor/flip-jump
-	url = https://github.com/tomhea/flip-jump.git
+[submodule "vendor/flipjump"]
+	path = vendor/flipjump
+	url = https://github.com/tomhea/flipjump.git
 	branch = main
 ```
 

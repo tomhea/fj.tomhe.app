@@ -328,7 +328,7 @@ stl.loop                  // halt`}</Pre>
         <ul className="space-y-1">
           <li>
             <a
-              href="https://github.com/tomhea/flip-jump/wiki"
+              href="https://github.com/tomhea/flipjump/wiki"
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: '#569cd6' }}
@@ -348,12 +348,12 @@ stl.loop                  // halt`}</Pre>
           </li>
           <li>
             <a
-              href="https://github.com/tomhea/flip-jump"
+              href="https://github.com/tomhea/flipjump"
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: '#569cd6' }}
             >
-              GitHub: tomhea/flip-jump ↗
+              GitHub: tomhea/flipjump ↗
             </a>
           </li>
           <li>
