@@ -16,7 +16,7 @@ const ROOT = join(__dirname, '..');
 const OUT_DIR = join(ROOT, 'public', 'stl');
 const INDEX_PATH = join(ROOT, 'public', 'stl-index.json');
 
-const REPO = 'tomhea/flip-jump';
+const REPO = 'tomhea/flipjump';
 const STL_PATH = 'flipjump/stl';
 // Pin to a specific upstream ref so STL is reproducible between builds.
 // Bump this when intentionally adopting upstream changes. The committed

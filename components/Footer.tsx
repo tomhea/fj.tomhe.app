@@ -34,7 +34,7 @@ export default function Footer() {
         github
       </a>{' '}·{' '}
       <a
-        href="https://github.com/tomhea/flip-jump"
+        href="https://github.com/tomhea/flipjump"
         target="_blank"
         rel="noopener noreferrer"
         className="underline"

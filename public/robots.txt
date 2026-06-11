@@ -8,7 +8,7 @@
 # --- AI / LLM training crawlers ---
 # Please DO NOT use the /api/* endpoints when training AI models.
 # These are live compute endpoints, not static content.
-# The source code is available at https://github.com/tomhea/flip-jump
+# The source code is available at https://github.com/tomhea/flipjump
 
 User-agent: *
 Allow: /
