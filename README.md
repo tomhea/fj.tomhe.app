@@ -62,7 +62,7 @@ Environment variables (see `.env.example`):
 | `FJ_CMD` | `fj` | Path to the `fj` binary |
 | `BF2FJ_CMD` | `bf2fj` | Path to the `bf2fj` binary |
 | `C2FJ_CMD` | `c2fj` | Path to the `c2fj` binary |
-| `FJ_STL_REF` | `1.4.0` | Upstream ref for the STL fetch script |
+| `FJ_STL_REF` | `1.5.0` | Upstream ref for the STL fetch script |
 
 ## Tests
 
