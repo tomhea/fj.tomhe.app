@@ -38,12 +38,22 @@ jobs:
       - name: Install Firefox + WebKit with system deps
         run: npx playwright install --with-deps firefox webkit
 
+      - name: Build Next.js app
+        # In CI, Playwright's webServer runs `npm start` (the production
+        # server), which requires a prior production build in `.next`.
+        # Without this step the server exits with "Could not find a
+        # production build" and every test fails. Mirrors test.yml.
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
       - name: Run Playwright (Firefox + WebKit)
         run: npx playwright test --project=firefox --project=webkit
         env:
           ALL_BROWSERS: '1'
           WS_MAX_CONNECTIONS_PER_IP: '50'
           WS_MAX_TOTAL_CONNECTIONS: '100'
+          NEXT_TELEMETRY_DISABLED: '1'
 
       - name: Upload report on failure
         if: failure()
