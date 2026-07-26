@@ -66,3 +66,37 @@ export async function waitForTerminal(page: Page, re: RegExp, timeoutMs = 30_000
 export async function toolbarBtn(page: Page, title: string): Promise<void> {
   await page.locator(`button[title="${title}"]`).first().click();
 }
+
+/** Append a single space at the end of the active file — the smallest edit
+ * that invalidates the example-cache hash / compiled FJM.
+ *
+ * The cursor is moved to EOF via the Monaco API, NOT via `Control+End`.
+ * Playwright's WebKit reports a macOS user agent, so Monaco binds
+ * cursor-to-bottom to Cmd+Down and leaves Ctrl+End unbound. The unhandled
+ * key then falls through to the browser, which natively moves the caret of
+ * Monaco's HIDDEN TEXTAREA to its end while Monaco's real cursor stays put.
+ * On the next typed character Monaco diffs the textarea against its
+ * expected state and "replays" the whole textarea tail into the model,
+ * duplicating several lines of code (seen in CI as a duplicated
+ * `stl.startup` block → fj failed with `label declared twice - "stl.IO"`). */
+export async function typeSpaceAtEof(page: Page): Promise<void> {
+  await page.locator('.monaco-editor').click();
+  await page.evaluate(() => {
+    // window.monaco is the self-hosted AMD global; typed loosely because the
+    // monaco types aren't available inside page.evaluate.
+    const monaco = (window as unknown as {
+      monaco: { editor: { getEditors(): Array<{
+        getModel(): { getLineCount(): number; getLineMaxColumn(line: number): number } | null;
+        setPosition(pos: { lineNumber: number; column: number }): void;
+        focus(): void;
+      }> } };
+    }).monaco;
+    const editor = monaco.editor.getEditors()[0];
+    const model = editor.getModel();
+    if (!model) throw new Error('typeSpaceAtEof: no Monaco model');
+    const lastLine = model.getLineCount();
+    editor.setPosition({ lineNumber: lastLine, column: model.getLineMaxColumn(lastLine) });
+    editor.focus();
+  });
+  await page.keyboard.type(' ');
+}

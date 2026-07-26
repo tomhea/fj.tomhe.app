@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { freshSession, waitForTerminal, terminalText, toolbarBtn } from './_helpers';
+import { freshSession, waitForTerminal, terminalText, toolbarBtn, typeSpaceAtEof } from './_helpers';
 
 test.describe('Compile/Run UX — timing visible and Run FJM after Run FJ', () => {
   test('Compile shows the four phase-timing lines on success', async ({ page }) => {
@@ -48,9 +48,7 @@ test.describe('Compile/Run UX — timing visible and Run FJM after Run FJ', () =
     // Mutate the source — `updateFileContent` in IDE.tsx sets compiledFjm
     // to null, so the toolbar's `compiledFjm && !isRunning` gate hides
     // the button. Same invariant the post-Compile flow already had.
-    await page.locator('.monaco-editor').click();
-    await page.keyboard.press('Control+End');
-    await page.keyboard.type(' ');
+    await typeSpaceAtEof(page);
     await expect(runFjm).toHaveCount(0);
   });
 });

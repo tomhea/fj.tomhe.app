@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { freshSession, terminalText, waitForTerminal } from './_helpers';
+import { freshSession, terminalText, typeSpaceAtEof, waitForTerminal } from './_helpers';
 
 // The cached-examples flow depends on `public/example-fjms/manifest.json`
 // being present. In CI the prebuild step (`tsx scripts/build-example-index.ts`)
@@ -78,14 +78,9 @@ test.describe('Cached example .fjm path', () => {
     await page.locator('button:has-text("Hello World")').click();
 
     // Invalidate the cache hash by appending a single space at the end of
-    // the file. We previously used `keyboard.type(' // NOT-CACHED')`, but
-    // Monaco occasionally swallows characters mid-token when fired without a
-    // delay (we saw "NOACHED" instead of "NOT-CACHED" in CI, which fj then
-    // parsed as a macro name and the test exited with code 1). A trailing
-    // space is the smallest, safest hash-invalidating edit.
-    await page.locator('.monaco-editor').click();
-    await page.keyboard.press('Control+End');
-    await page.keyboard.type(' ');
+    // the file. The helper positions the cursor via the Monaco API — see
+    // typeSpaceAtEof for why `Control+End` corrupts the buffer on WebKit.
+    await typeSpaceAtEof(page);
 
     // Reset request log so we only count THIS run's requests.
     cachedHits.length = 0;
