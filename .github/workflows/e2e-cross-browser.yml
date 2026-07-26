@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '0 6 * * 0'  # Sunday 6 AM UTC
 
-# Minimum perms — only checkout reads the repo; upload-artifact@v4 uses the
+# Minimum perms — only checkout reads the repo; upload-artifact uses the
 # actions runtime API, not the GITHUB_TOKEN.
 permissions:
   contents: read
@@ -16,14 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-node@v6.4.0
         with:
           node-version: '24'
           cache: 'npm'
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.11'
 
@@ -57,7 +57,7 @@ jobs:
 
       - name: Upload report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: cross-browser-report
           path: |
